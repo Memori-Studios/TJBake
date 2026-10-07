@@ -18,7 +18,7 @@ namespace MemoriStudios.TJBake
         public const string RigidShaderName = "Universal Render Pipeline/Lit";
 
         /// <summary>Reads and validates the manifest only, as a boot-time check does. Returns null and an error on any problem.</summary>
-        public static UnitJson ReadManifest(string folder, out string error)
+        public static UnitJson ReadManifest(string folder, out string error, bool hostTextures = false)
         {
             error = null;
             try
@@ -27,7 +27,7 @@ namespace MemoriStudios.TJBake
                 if (!File.Exists(path)) throw new GpuAnimFormatException("unit.json is missing");
                 UnitJson json = JsonUtility.FromJson<UnitJson>(File.ReadAllText(path));
                 if (json == null) throw new GpuAnimFormatException("unit.json did not parse");
-                TJBakeValidation.ValidateManifest(json, folder);
+                TJBakeValidation.ValidateManifest(json, folder, hostTextures);
                 return json;
             }
             catch (Exception e)
@@ -38,13 +38,14 @@ namespace MemoriStudios.TJBake
         }
 
         /// <summary>Loads the whole folder. The caller owns every object it adds to <paramref name="owned"/> and destroys them together.</summary>
-        public static TJBakeVisual Load(string folder, List<UnityEngine.Object> owned, bool isRider = false)
+        /// <param name="resolveTexture">Loads a texture the manifest names with <see cref="TJBakeValidation.HostTexturePrefix"/>; the host keeps ownership. Null refuses such names.</param>
+        public static TJBakeVisual Load(string folder, List<UnityEngine.Object> owned, bool isRider = false, Func<string, Texture2D> resolveTexture = null)
         {
             string manifestPath = Path.Combine(folder, ManifestName);
             if (!File.Exists(manifestPath)) throw new GpuAnimFormatException("unit.json is missing");
             UnitJson json = JsonUtility.FromJson<UnitJson>(File.ReadAllText(manifestPath));
             if (json == null) throw new GpuAnimFormatException("unit.json did not parse");
-            TJBakeValidation.ValidateManifest(json, folder);
+            TJBakeValidation.ValidateManifest(json, folder, resolveTexture != null);
             if (isRider != (json.kind == "rider")) throw new GpuAnimFormatException($"unit.json kind is '{json.kind}', expected '{(isRider ? "rider" : "unit")}'");
             CheckFolderSize(folder);
 
@@ -84,9 +85,9 @@ namespace MemoriStudios.TJBake
             for (int i = 0; i < json.materials.Count; i++)
             {
                 MaterialJson m = json.materials[i];
-                Texture2D baseMap = LoadTexture(folder, m.baseColor, true, textures, owned);
-                Texture2D normalMap = LoadTexture(folder, m.normal, false, textures, owned);
-                Texture2D emissionMap = LoadTexture(folder, m.emission, true, textures, owned);
+                Texture2D baseMap = LoadTexture(folder, m.baseColor, true, textures, owned, resolveTexture);
+                Texture2D normalMap = LoadTexture(folder, m.normal, false, textures, owned, resolveTexture);
+                Texture2D emissionMap = LoadTexture(folder, m.emission, true, textures, owned, resolveTexture);
                 visual.SkinnedMaterials[i] = MakeMaterial(SkinnedShaderName, m, baseMap, normalMap, emissionMap, tex, owned);
                 visual.RigidMaterials[i] = MakeMaterial(RigidShaderName, m, baseMap, normalMap, emissionMap, null, owned);
             }
@@ -114,14 +115,14 @@ namespace MemoriStudios.TJBake
                     variant.Attachments.Add(new TJBakeAttachment
                     {
                         Mesh = mesh, MaterialIndex = a.material, AnchorIndex = json.anchors.IndexOf(a.anchor), Role = TJBakeValidation.ParseRole(a.role),
-                        LodMask = mask == 0 ? 0b11 : mask, Bounds = bounds,
+                        LodMask = mask == 0 ? 0b11 : mask, Bounds = bounds, Tag = a.tag ?? "",
                     });
                 }
                 visual.Variants.Add(variant);
             }
 
             if (!isRider && !string.IsNullOrEmpty(json.rider))
-                visual.Rider = Load(Path.Combine(folder, json.rider.TrimEnd('/', '\\')), owned, true);
+                visual.Rider = Load(Path.Combine(folder, json.rider.TrimEnd('/', '\\')), owned, true, resolveTexture);
             return visual;
         }
 
@@ -142,10 +143,17 @@ namespace MemoriStudios.TJBake
             return File.ReadAllBytes(path);
         }
 
-        private static Texture2D LoadTexture(string folder, string file, bool srgb, Dictionary<string, Texture2D> cache, List<UnityEngine.Object> owned)
+        private static Texture2D LoadTexture(string folder, string file, bool srgb, Dictionary<string, Texture2D> cache, List<UnityEngine.Object> owned, Func<string, Texture2D> resolveTexture)
         {
             if (string.IsNullOrEmpty(file)) return null;
             if (cache.TryGetValue(file, out Texture2D cached)) return cached;
+            if (file.StartsWith(TJBakeValidation.HostTexturePrefix))
+            {
+                Texture2D hosted = resolveTexture?.Invoke(file.Substring(TJBakeValidation.HostTexturePrefix.Length));
+                if (hosted == null) throw new GpuAnimFormatException($"the host did not supply texture '{file}'");
+                cache[file] = hosted;
+                return hosted;
+            }
             byte[] bytes = ReadFile(folder, file, MaxMeshBytes);
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, true, !srgb) { name = file };
             if (!tex.LoadImage(bytes, true)) throw new GpuAnimFormatException($"{file} is not a PNG the engine can read");
@@ -165,7 +173,11 @@ namespace MemoriStudios.TJBake
             mat.SetColor("_BaseColor", tint);
             mat.SetFloat("_Smoothness", math.saturate(m.smoothness));
             if (normalMap != null) { mat.SetTexture("_BumpMap", normalMap); mat.EnableKeyword("_NORMALMAP"); }
-            if (emissionMap != null) { mat.SetTexture("_EmissionMap", emissionMap); mat.SetColor("_EmissionColor", Color.white); mat.EnableKeyword("_EMISSION"); }
+            if (emissionMap != null)
+            {
+                var glow = m.emissionColor != null && m.emissionColor.Length == 4 ? new Color(m.emissionColor[0], m.emissionColor[1], m.emissionColor[2], m.emissionColor[3]) : Color.white;
+                mat.SetTexture("_EmissionMap", emissionMap); mat.SetColor("_EmissionColor", glow); mat.EnableKeyword("_EMISSION");
+            }
             if (boneTex != null) mat.SetTexture("_BoneTex", boneTex);
             if (m.transparent)
             {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using MemoriStudios.TJBake.Format;
 using Unity.Mathematics;
@@ -9,14 +10,28 @@ using UnityEngine;
 
 namespace MemoriStudios.TJBake.Editor
 {
+    public sealed class TJBakeParameter
+    {
+        public string Name = "";
+        public AnimatorControllerParameterType Type = AnimatorControllerParameterType.Float;
+        public float Float;
+        public int Int;
+        public bool Bool;
+    }
+
     public sealed class TJBakeSlotRequest
     {
         public string Name = "";
+        // Sets the frame count and the return point; it is also what plays when no state is named.
         public AnimationClip Clip;
         public bool Loop;
         public bool ReturnToIdle;
-        // Negative means: take the first animation event on the clip, else the request default.
+        // Negative means: take the clip's ReturnToIdle event, else the request default.
         public float ReturnAt = -1f;
+        // Optional: pose through the root's Animator by playing this base-layer state with these parameters, so extra
+        // layers (a hand holding a prop) and blend trees bake the way they play.
+        public string StateName = "";
+        public List<TJBakeParameter> Parameters = new();
     }
 
     public sealed class TJBakeAnchorRequest
@@ -33,6 +48,16 @@ namespace MemoriStudios.TJBake.Editor
         public string Anchor = "";
         public TJBakePropRole Role = TJBakePropRole.Prop;
         public int LodMask = 0b11;
+        // Written to the manifest for the host game.
+        public string Tag = "";
+    }
+
+    /// <summary>A further look for the same rig: its own meshes and props on the first variant's skeleton and clips.</summary>
+    public sealed class TJBakeVariantRequest
+    {
+        // An instance of a rig whose bones carry the same names as the request's root.
+        public GameObject Root;
+        public List<TJBakeAttachmentRequest> Attachments = new();
     }
 
     /// <summary>Everything one bake needs. The caller owns the instantiated objects it hands over.</summary>
@@ -44,6 +69,8 @@ namespace MemoriStudios.TJBake.Editor
         public int Fps = 30;
         // Baked into the matrices so the visual's root stays at scale 1.
         public float RootScale = 1f;
+        // Baked in the same way, applied after the scale, so a rider can sit above its saddle point.
+        public Vector3 RootOffset = Vector3.zero;
         public float DefaultReturnAt = 0.9f;
         public string BakerName = "TJBake";
         // An instance (scene or preview scene) of the rigged prefab; its active SkinnedMeshRenderers form LOD0.
@@ -54,7 +81,13 @@ namespace MemoriStudios.TJBake.Editor
         public List<TJBakeSlotRequest> Slots = new();
         public List<TJBakeAnchorRequest> Anchors = new();
         public List<TJBakeAttachmentRequest> Attachments = new();
+        // Up to two more variants; they share the skeleton, clips and anchors of this one.
+        public List<TJBakeVariantRequest> ExtraVariants = new();
         public TJBakeRequest Rider;
+        // When set and it returns a name, the manifest names the texture asset instead of copying it out as a PNG.
+        public Func<Texture2D, string> TextureReference;
+        // A rig with no skinned mesh (an invisible clock that only times its slots) bakes a one-millimetre triangle instead of failing.
+        public bool PlaceholderWhenNoMesh;
     }
 
     /// <summary>Samples a rig's clips into the TJBake file format: bone matrices per frame, anchor matrices, meshes, textures and the manifest.</summary>
@@ -70,6 +103,7 @@ namespace MemoriStudios.TJBake.Editor
             if (r.Rider != null)
             {
                 r.Rider.IsRider = true;
+                r.Rider.TextureReference ??= r.TextureReference;
                 r.Rider.OutputFolder = Path.Combine(r.OutputFolder, "rider");
                 Directory.CreateDirectory(r.Rider.OutputFolder);
                 report.AppendLine("rider:");
@@ -78,7 +112,7 @@ namespace MemoriStudios.TJBake.Editor
                 json.rider = "rider/";
             }
             File.WriteAllText(Path.Combine(r.OutputFolder, TJBakeVisualLoader.ManifestName), JsonUtility.ToJson(json, true));
-            TJBakeValidation.ValidateManifest(json, r.OutputFolder);
+            TJBakeValidation.ValidateManifest(json, r.OutputFolder, r.TextureReference != null);
             return json;
         }
         #endregion
@@ -110,13 +144,39 @@ namespace MemoriStudios.TJBake.Editor
             public MeshBinData Mesh;
             public Material Material;
             public int Lod;
+            public int Variant;
             public string File;
             // LOD meshes carry their own bind poses, so skinning uses them instead of LOD0's.
             public Matrix4x4[] BindPoses;
             public int[] BoneMap;
         }
 
-        private static List<BodyPart> ReadBodies(GameObject root, Skeleton skeleton, int lod, bool matchByName)
+        private static Transform FindByName(Transform parent, string name)
+        {
+            if (parent.name == name) return parent;
+            foreach (Transform child in parent)
+            {
+                Transform found = FindByName(child, name);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private static List<BodyPart> Placeholder(GameObject root, Skeleton skeleton)
+        {
+            int bone = skeleton.Add(root.transform, Matrix4x4.identity);
+            var data = new MeshBinData
+            {
+                Positions = new[] { new float3(0, 0, 0), new float3(0.001f, 0, 0), new float3(0, 0.001f, 0) },
+                Normals = new[] { new float3(0, 1, 0), new float3(0, 1, 0), new float3(0, 1, 0) },
+                BoneIndices = new[] { new uint4((uint)bone, 0, 0, 0), new uint4((uint)bone, 0, 0, 0), new uint4((uint)bone, 0, 0, 0) },
+                BoneWeights = new[] { new float4(1, 0, 0, 0), new float4(1, 0, 0, 0), new float4(1, 0, 0, 0) },
+                Indices = new[] { 0, 1, 2 },
+            };
+            return new List<BodyPart> { new BodyPart { Mesh = data, Material = null, Lod = 0, BindPoses = new[] { Matrix4x4.identity }, BoneMap = new[] { bone } } };
+        }
+
+        private static List<BodyPart> ReadBodies(GameObject root, Skeleton skeleton, int lod, bool matchByName, int variant = 0, GameObject firstRoot = null)
         {
             var parts = new List<BodyPart>();
             foreach (SkinnedMeshRenderer smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(false))
@@ -132,7 +192,13 @@ namespace MemoriStudios.TJBake.Editor
                     if (bone == null) { map[b] = 0; continue; }
                     if (matchByName)
                     {
-                        if (!skeleton.TryByName(bone.name, out map[b])) throw new Exception($"LOD{lod} bone '{bone.name}' is not in the LOD0 skeleton");
+                        if (!skeleton.TryByName(bone.name, out map[b]))
+                        {
+                            // A bone only this mesh uses still animates if the first rig has it: add it at its rest pose.
+                            Transform same = firstRoot != null ? FindByName(firstRoot.transform, bone.name) : null;
+                            if (same == null) throw new Exception($"variant {variant} LOD{lod} bone '{bone.name}' is not in the first variant's rig");
+                            map[b] = skeleton.Add(same, (firstRoot.transform.worldToLocalMatrix * same.localToWorldMatrix).inverse);
+                        }
                     }
                     else map[b] = skeleton.Add(bone, bind[b]);
                 }
@@ -185,10 +251,10 @@ namespace MemoriStudios.TJBake.Editor
                         Indices = tris,
                     };
                     Material material = smr.sharedMaterials != null && s < smr.sharedMaterials.Length ? smr.sharedMaterials[s] : smr.sharedMaterial;
-                    parts.Add(new BodyPart { Mesh = data, Material = material, Lod = lod, BindPoses = bind, BoneMap = map });
+                    parts.Add(new BodyPart { Mesh = data, Material = material, Lod = lod, Variant = variant, BindPoses = bind, BoneMap = map });
                 }
             }
-            if (parts.Count == 0) throw new Exception($"LOD{lod} has no active skinned mesh");
+            if (parts.Count == 0) throw new Exception($"variant {variant} LOD{lod} has no active skinned mesh");
             return parts;
         }
         #endregion
@@ -202,13 +268,23 @@ namespace MemoriStudios.TJBake.Editor
             public string File;
         }
 
-        private static List<PropPart> ReadProps(TJBakeRequest r, StringBuilder report)
+        // A prop prefab picks its look by switching children off; those must not bake.
+        private static bool ShownUnder(Transform t, Transform holder)
+        {
+            var mr = t.GetComponent<MeshRenderer>();
+            if (mr != null && !mr.enabled) return false;
+            for (; t != null && t != holder; t = t.parent)
+                if (!t.gameObject.activeSelf) return false;
+            return true;
+        }
+
+        private static List<PropPart> ReadProps(List<TJBakeAttachmentRequest> attachments, StringBuilder report)
         {
             var props = new List<PropPart>();
-            foreach (TJBakeAttachmentRequest a in r.Attachments)
+            foreach (TJBakeAttachmentRequest a in attachments)
             {
                 if (a.Holder == null) throw new Exception($"attachment '{a.Name}' has no holder transform");
-                MeshFilter[] filters = a.Holder.GetComponentsInChildren<MeshFilter>(true);
+                MeshFilter[] filters = a.Holder.GetComponentsInChildren<MeshFilter>(true).Where(mf => ShownUnder(mf.transform, a.Holder)).ToArray();
                 if (filters.Length == 0)
                 {
                     if (a.Role == TJBakePropRole.Prop) { report.AppendLine($"  {a.Name}: no mesh and no role, skipped"); continue; }
@@ -267,11 +343,18 @@ namespace MemoriStudios.TJBake.Editor
             for (int i = 0; i < r.Slots.Count; i++) if (r.Slots[i].Clip == null) throw new Exception($"slot {i} ({r.Slots[i].Name}) has no clip");
             if (r.LodRoots.Count > 2) throw new Exception("at most 3 LODs");
             if (r.LodSwitch.Count != r.LodRoots.Count) throw new Exception($"lodSwitch needs {r.LodRoots.Count} entries for {r.LodRoots.Count + 1} LODs");
+            if (r.ExtraVariants.Count > 2) throw new Exception("at most 3 variants");
+            if (r.ExtraVariants.Count > 0 && r.LodRoots.Count > 0) throw new Exception("LODs together with several variants are not supported yet");
 
             var skeleton = new Skeleton();
-            var bodies = ReadBodies(r.Root, skeleton, 0, false);
-            for (int l = 0; l < r.LodRoots.Count; l++) bodies.AddRange(ReadBodies(r.LodRoots[l], skeleton, l + 1, true));
-            List<PropPart> props = ReadProps(r, report);
+            bool noMesh = r.PlaceholderWhenNoMesh && r.Root.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length == 0;
+            var bodies = noMesh ? Placeholder(r.Root, skeleton) : ReadBodies(r.Root, skeleton, 0, false);
+            for (int l = 0; l < r.LodRoots.Count; l++) bodies.AddRange(ReadBodies(r.LodRoots[l], skeleton, l + 1, true, 0, r.Root));
+            for (int v = 0; v < r.ExtraVariants.Count; v++) bodies.AddRange(ReadBodies(r.ExtraVariants[v].Root, skeleton, 0, true, v + 1, r.Root));
+            var variantProps = new List<List<PropPart>> { ReadProps(r.Attachments, report) };
+            foreach (TJBakeVariantRequest extra in r.ExtraVariants) variantProps.Add(ReadProps(extra.Attachments, report));
+            var props = new List<PropPart>();
+            foreach (List<PropPart> list in variantProps) props.AddRange(list);
             var anchorNames = new List<string>();
             foreach (TJBakeAnchorRequest a in r.Anchors)
             {
@@ -302,6 +385,13 @@ namespace MemoriStudios.TJBake.Editor
             if (totalFrames > AnimBin.MaxFrames) throw new Exception($"{totalFrames} frames in total, the limit is {AnimBin.MaxFrames}");
             if (skeleton.Bones.Count > AnimBin.MaxBones) throw new Exception($"{skeleton.Bones.Count} bones, the limit is {AnimBin.MaxBones}");
 
+            // A LOD or variant mesh skinned with the first rig's matrices needs its vertices moved into that rig's bind space.
+            var variantOffset = new float[r.ExtraVariants.Count + 1];
+            foreach (BodyPart part in bodies)
+                if (part.Lod > 0 || part.Variant > 0) variantOffset[part.Variant] = math.max(variantOffset[part.Variant], RebindToLod0(part, skeleton));
+            for (int v = 1; v < variantOffset.Length; v++)
+                report.AppendLine($"  variant {v}: bones sit up to {variantOffset[v]:F4} m from the first variant's (0 means the same proportions)");
+
             // Sample every frame: skinning matrices, anchor matrices, and posed vertices for the bounds.
             int boneCount = skeleton.Bones.Count;
             var matrices = new float3x4[totalFrames * boneCount];
@@ -310,7 +400,10 @@ namespace MemoriStudios.TJBake.Editor
             var skinLod0 = new Matrix4x4[boneCount];
             var bodyMin = new float3[bodies.Count]; var bodyMax = new float3[bodies.Count];
             for (int b = 0; b < bodies.Count; b++) { bodyMin[b] = new float3(float.MaxValue); bodyMax[b] = new float3(float.MinValue); }
-            Matrix4x4 scale = Matrix4x4.Scale(new Vector3(r.RootScale, r.RootScale, r.RootScale));
+            Matrix4x4 scale = Matrix4x4.TRS(r.RootOffset, Quaternion.identity, new Vector3(r.RootScale, r.RootScale, r.RootScale));
+            Animator animator = PrepareAnimator(r, out List<Animator> nestedAnimators);
+            Vector3 rootPosition = r.Root.transform.position;
+            Quaternion rootRotation = r.Root.transform.rotation;
             Matrix4x4 rootInv = r.Root.transform.worldToLocalMatrix;
             var lodRootInv = new Matrix4x4[r.LodRoots.Count];
             for (int l = 0; l < r.LodRoots.Count; l++) lodRootInv[l] = r.LodRoots[l].transform.worldToLocalMatrix;
@@ -322,7 +415,13 @@ namespace MemoriStudios.TJBake.Editor
                 for (int f = 0; f < frameCounts[s]; f++, frame++)
                 {
                     float t = loop ? (f / (float)r.Fps) % Mathf.Max(clip.length, 0.0001f) : Mathf.Min(f / (float)r.Fps, clip.length);
-                    clip.SampleAnimation(r.Root, t);
+                    if (animator != null && !string.IsNullOrEmpty(r.Slots[s].StateName)) PoseWithAnimator(animator, nestedAnimators, r.Slots[s], t, clip.length);
+                    else
+                    {
+                        // Root motion is the host's job; a clip that travels must still animate in place.
+                        clip.SampleAnimation(r.Root, t);
+                        r.Root.transform.SetPositionAndRotation(rootPosition, rootRotation);
+                    }
                     foreach (GameObject lodRoot in r.LodRoots) clip.SampleAnimation(lodRoot, t);
                     for (int b = 0; b < boneCount; b++)
                     {
@@ -341,13 +440,16 @@ namespace MemoriStudios.TJBake.Editor
             AnimBin.Write(Path.Combine(r.OutputFolder, "anim.bin"), boneCount, totalFrames, matrices);
             if (anchorNames.Count > 0) AnchorsBin.Write(Path.Combine(r.OutputFolder, "anchors.bin"), anchorNames.Count, totalFrames, anchorMatrices);
 
-            // A LOD mesh skinned with LOD0's matrices needs its vertices moved from its own bind space into LOD0's.
-            foreach (BodyPart part in bodies) if (part.Lod > 0) RebindToLod0(part, skeleton);
-
             // Materials, meshes, props, manifest.
             var materialIndex = new Dictionary<Material, int>();
-            var lods = new List<LodJson>();
-            for (int l = 0; l <= r.LodRoots.Count; l++) lods.Add(new LodJson());
+            int variantCount = r.ExtraVariants.Count + 1;
+            var variants = new List<VariantJson>();
+            for (int v = 0; v < variantCount; v++)
+            {
+                var vj = new VariantJson();
+                for (int l = 0; l <= r.LodRoots.Count; l++) vj.lods.Add(new LodJson());
+                variants.Add(vj);
+            }
             for (int b = 0; b < bodies.Count; b++)
             {
                 BodyPart part = bodies[b];
@@ -356,26 +458,77 @@ namespace MemoriStudios.TJBake.Editor
                 part.Mesh.BoundsMax = bodyMax[b] + pad;
                 part.File = $"body_{b}.mesh.bin";
                 MeshBin.Write(Path.Combine(r.OutputFolder, part.File), part.Mesh);
-                lods[part.Lod].meshes.Add(new MeshRefJson { file = part.File, material = MaterialSlot(part.Material, materialIndex, json, r.OutputFolder, report) });
+                variants[part.Variant].lods[part.Lod].meshes.Add(new MeshRefJson { file = part.File, material = MaterialSlot(part.Material, materialIndex, json, r.OutputFolder, report, r.TextureReference) });
             }
-            var variant = new VariantJson();
-            variant.lods.AddRange(lods);
-            for (int p = 0; p < props.Count; p++)
+            int fileIndex = 0;
+            for (int v = 0; v < variantCount; v++)
             {
-                PropPart part = props[p];
-                part.File = $"attach_{p}.mesh.bin";
-                MeshBin.Write(Path.Combine(r.OutputFolder, part.File), part.Mesh);
-                var lodList = new List<int>();
-                for (int l = 0; l < 8; l++) if ((part.Request.LodMask & (1 << l)) != 0) lodList.Add(l);
-                variant.attachments.Add(new AttachmentJson
+                foreach (PropPart part in variantProps[v])
                 {
-                    file = part.File, material = MaterialSlot(part.Material, materialIndex, json, r.OutputFolder, report),
-                    anchor = part.Request.Anchor, role = TJBakeValidation.RoleName(part.Request.Role), lods = lodList,
-                });
+                    part.File = $"attach_{fileIndex++}.mesh.bin";
+                    MeshBin.Write(Path.Combine(r.OutputFolder, part.File), part.Mesh);
+                    var lodList = new List<int>();
+                    for (int l = 0; l < 8; l++) if ((part.Request.LodMask & (1 << l)) != 0) lodList.Add(l);
+                    variants[v].attachments.Add(new AttachmentJson
+                    {
+                        file = part.File, material = MaterialSlot(part.Material, materialIndex, json, r.OutputFolder, report, r.TextureReference),
+                        anchor = part.Request.Anchor, role = TJBakeValidation.RoleName(part.Request.Role), lods = lodList, tag = part.Request.Tag ?? "",
+                    });
+                }
             }
-            json.variants.Add(variant);
-            report.AppendLine($"{r.UnitName}{(r.IsRider ? " rider" : "")}: {boneCount} bones, {totalFrames} frames, {bodies.Count} body meshes over {lods.Count} LOD(s), {props.Count} props, {json.materials.Count} materials, scale {r.RootScale}");
+            json.variants.AddRange(variants);
+            report.AppendLine($"{r.UnitName}{(r.IsRider ? " rider" : "")}: {boneCount} bones, {totalFrames} frames, {variantCount} variant(s), {bodies.Count} body meshes over {r.LodRoots.Count + 1} LOD(s), {props.Count} props, {json.materials.Count} materials, scale {r.RootScale}");
             return json;
+        }
+
+        // The root's Animator when any slot names a state, rebound so every layer starts at its default state.
+        private static Animator PrepareAnimator(TJBakeRequest r, out List<Animator> nested)
+        {
+            nested = new List<Animator>();
+            bool wanted = false;
+            foreach (TJBakeSlotRequest slot in r.Slots) if (!string.IsNullOrEmpty(slot.StateName)) wanted = true;
+            if (!wanted) return null;
+            Animator animator = r.Root.GetComponentInChildren<Animator>(true);
+            if (animator == null || animator.runtimeAnimatorController == null) throw new Exception("slots name animator states but the root has no Animator with a controller");
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            animator.applyRootMotion = false;
+            animator.Rebind();
+            animator.Update(0f);
+            foreach (Animator child in r.Root.GetComponentsInChildren<Animator>(true))
+            {
+                if (child == animator || child.runtimeAnimatorController == null) continue;
+                child.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                child.applyRootMotion = false;
+                child.Rebind();
+                child.Update(0f);
+                nested.Add(child);
+            }
+            return animator;
+        }
+
+        // Nested animators (wings on a mount) keep playing their default state on the same clock.
+        private static void PoseWithAnimator(Animator animator, List<Animator> nested, TJBakeSlotRequest slot, float t, float length)
+        {
+            foreach (TJBakeParameter p in slot.Parameters)
+            {
+                switch (p.Type)
+                {
+                    case AnimatorControllerParameterType.Float: animator.SetFloat(p.Name, p.Float); break;
+                    case AnimatorControllerParameterType.Int: animator.SetInteger(p.Name, p.Int); break;
+                    case AnimatorControllerParameterType.Bool: animator.SetBool(p.Name, p.Bool); break;
+                }
+            }
+            // A one-shot's last frame is sampled just short of 1 so a looping state does not wrap to its first frame.
+            float normalized = length > 0f ? Mathf.Min(t / length, 0.9999f) : 0f;
+            animator.Play(slot.StateName, 0, normalized);
+            animator.Update(0f);
+            foreach (Animator child in nested)
+            {
+                AnimatorStateInfo info = child.GetCurrentAnimatorStateInfo(0);
+                float childLength = Mathf.Max(info.length, 0.0001f);
+                child.Play(info.fullPathHash, 0, (t / childLength) % 1f);
+                child.Update(0f);
+            }
         }
 
         private static float ReturnAtFromEvents(AnimationClip clip, float fallback)
@@ -392,10 +545,16 @@ namespace MemoriStudios.TJBake.Editor
         }
 
         // The skinning matrix maps LOD0 bind space to the pose; a LOD mesh's own bind pose differs, so fold the difference into its vertices.
-        private static void RebindToLod0(BodyPart part, Skeleton skeleton)
+        // Returns how far, in metres, the mesh's bind skeleton sits from the first rig's at its furthest bone.
+        private static float RebindToLod0(BodyPart part, Skeleton skeleton)
         {
             var fix = new Matrix4x4[part.BindPoses.Length];
-            for (int b = 0; b < fix.Length; b++) fix[b] = skeleton.BindPoses[part.BoneMap[b]].inverse * part.BindPoses[b];
+            float worst = 0f;
+            for (int b = 0; b < fix.Length; b++)
+            {
+                fix[b] = skeleton.BindPoses[part.BoneMap[b]].inverse * part.BindPoses[b];
+                worst = math.max(worst, ((Vector3)fix[b].GetColumn(3)).magnitude);
+            }
             MeshBinData m = part.Mesh;
             for (int v = 0; v < m.Positions.Length; v++)
             {
@@ -407,6 +566,7 @@ namespace MemoriStudios.TJBake.Editor
                 if (m.Normals != null) m.Normals[v] = math.normalize((float3)f.MultiplyVector(m.Normals[v]));
                 if (m.Tangents != null) { float3 t = math.normalize((float3)f.MultiplyVector(m.Tangents[v].xyz)); m.Tangents[v] = new float4(t, m.Tangents[v].w); }
             }
+            return worst;
         }
 
         private static int LocalBone(BodyPart part, int v, float4 w)
@@ -444,7 +604,7 @@ namespace MemoriStudios.TJBake.Editor
         #endregion
 
         #region Materials and textures
-        private static int MaterialSlot(Material material, Dictionary<Material, int> index, UnitJson json, string folder, StringBuilder report)
+        private static int MaterialSlot(Material material, Dictionary<Material, int> index, UnitJson json, string folder, StringBuilder report, Func<Texture2D, string> reference = null)
         {
             if (material == null) material = new Material(Shader.Find(TJBakeVisualLoader.RigidShaderName));
             if (index.TryGetValue(material, out int i)) return i;
@@ -452,7 +612,9 @@ namespace MemoriStudios.TJBake.Editor
             index[material] = i;
             string baseName = $"mat_{i}_base.png";
             Texture2D baseMap = FindBaseMap(material);
-            if (baseMap == null) WriteSolidPng(Path.Combine(folder, baseName), material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white);
+            string baseRef = baseMap != null ? reference?.Invoke(baseMap) : null;
+            if (baseRef != null) baseName = baseRef;
+            else if (baseMap == null) WriteSolidPng(Path.Combine(folder, baseName), material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white);
             else ExportPng(baseMap, Path.Combine(folder, baseName));
             Color tint = material.HasProperty("_BaseColor") && baseMap != null ? material.GetColor("_BaseColor") : Color.white;
             var entry = new MaterialJson
@@ -462,9 +624,18 @@ namespace MemoriStudios.TJBake.Editor
                 transparent = material.HasProperty("_Surface") && material.GetFloat("_Surface") > 0.5f,
             };
             Texture2D normal = material.HasProperty("_BumpMap") ? material.GetTexture("_BumpMap") as Texture2D : null;
-            if (normal != null && material.IsKeywordEnabled("_NORMALMAP")) { entry.normal = $"mat_{i}_normal.png"; ExportPng(normal, Path.Combine(folder, entry.normal)); }
+            if (normal != null && material.IsKeywordEnabled("_NORMALMAP"))
+            {
+                entry.normal = reference?.Invoke(normal);
+                if (entry.normal == null) { entry.normal = $"mat_{i}_normal.png"; ExportPng(normal, Path.Combine(folder, entry.normal)); }
+            }
             Texture2D emission = material.HasProperty("_EmissionMap") ? material.GetTexture("_EmissionMap") as Texture2D : null;
-            if (emission != null && material.IsKeywordEnabled("_EMISSION")) { entry.emission = $"mat_{i}_emission.png"; ExportPng(emission, Path.Combine(folder, entry.emission)); }
+            if (emission != null && material.IsKeywordEnabled("_EMISSION"))
+            {
+                entry.emission = reference?.Invoke(emission);
+                if (entry.emission == null) { entry.emission = $"mat_{i}_emission.png"; ExportPng(emission, Path.Combine(folder, entry.emission)); }
+                if (material.HasProperty("_EmissionColor")) { Color glow = material.GetColor("_EmissionColor"); entry.emissionColor = new[] { glow.r, glow.g, glow.b, glow.a }; }
+            }
             json.materials.Add(entry);
             report.AppendLine($"  material {i}: {material.name} base={(baseMap != null ? baseMap.name : "solid")}");
             return i;

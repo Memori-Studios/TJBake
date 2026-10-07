@@ -76,15 +76,15 @@ relative to the folder, no subfolders except `rider/`.
 | `slots[].loop`, `returnToIdle` | bool | See the contract, section 3. `loop` and `returnToIdle` are never both true. |
 | `slots[].returnAt` | float | 0.5 to 1.0, default 0.9, only read when `returnToIdle` is true. |
 | `anchors[]` | string[] | Names, unique, in `anchors.bin` order. May be empty. |
-| `materials[]` | array | At least one. Texture file names must exist in the folder. `tint` is linear RGBA. |
+| `materials[]` | array | At least one. Texture file names must exist in the folder, except names starting `asset:`, which a host that passes a texture resolver loads itself (other readers refuse them). `tint` is linear RGBA. `emissionColor` (optional, default white) is the HDR colour the emission map is multiplied by. |
 | `lodSwitch[]` | float[] | 0 to 2 entries, descending, each in (0, 1): the screen-height fraction below which the next LOD shows. Length equals LOD count minus 1 on every variant. |
 | `variants[]` | array | 1 to 3. Every variant has the same LOD count. |
 | `variants[].lods[].meshes[]` | array | At least one mesh per LOD. `material` indexes `materials`. |
-| `variants[].attachments[]` | array | `anchor` must be in `anchors`, `role` is one of `prop`, `bow`, `sword`, `shield`, `saddle`, `lods` lists the LOD indices that show it (default `[0, 1]`). |
+| `variants[].attachments[]` | array | `anchor` must be in `anchors`, `role` is one of `prop`, `bow`, `sword`, `shield`, `saddle`, `lods` lists the LOD indices that show it (default `[0, 1]`). `tag` (optional) is free text for the host game; TJBake only carries it. |
 | `rider` | string | Optional, always `"rider/"`. |
 
-Role counts the loader checks against the unit's `UnitType` and `UnitSize`: ranged needs one `bow`, hybrid one `bow`
-and one `sword`, cavalry with a rider one `saddle`. More than one of a role fails the file.
+A variant with a rider needs one `saddle`, and more than one `saddle` fails the file. `bow`, `sword` and `shield` may
+repeat; what a host does with each role is the host's business (Tabletop Tavern's rules are in its modding guide).
 
 ## 3. anim.bin
 
