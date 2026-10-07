@@ -1,0 +1,18 @@
+{
+  "name": "com.memori-studios.tjbake",
+  "displayName": "TJBake",
+  "version": "0.1.0",
+  "unity": "6000.0",
+  "description": "GPU animation baking for Unity: bakes a rigged, animated prefab into bone matrix textures plus plain mesh files, and plays them back on a MeshRenderer or an Entities Graphics batch. Textured joints, no Animator at runtime.",
+  "keywords": ["gpu", "animation", "skinning", "crowd", "vertex animation", "modding"],
+  "author": {
+    "name": "Memori Studios",
+    "url": "https://github.com/Memori-Studios"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "com.unity.mathematics": "1.3.3",
+    "com.unity.render-pipelines.universal": "17.3.0"
+  },
+  "samples": []
+}
