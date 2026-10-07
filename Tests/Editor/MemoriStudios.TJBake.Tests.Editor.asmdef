@@ -1,0 +1,26 @@
+{
+    "name": "MemoriStudios.TJBake.Tests.Editor",
+    "rootNamespace": "MemoriStudios.TJBake.Tests",
+    "references": [
+        "MemoriStudios.TJBake",
+        "MemoriStudios.TJBake.Editor",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

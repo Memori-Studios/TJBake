@@ -1,0 +1,19 @@
+{
+    "name": "MemoriStudios.TJBake.Editor",
+    "rootNamespace": "MemoriStudios.TJBake.Editor",
+    "references": [
+        "MemoriStudios.TJBake",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
