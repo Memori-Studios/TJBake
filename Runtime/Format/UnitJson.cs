@@ -47,6 +47,8 @@ namespace MemoriStudios.TJBake.Format
         public string baseColor = "";
         public string normal = "";
         public string emission = "";
+        // HDR colour the emission map is multiplied by; manifests without it glow white.
+        public float[] emissionColor = { 1f, 1f, 1f, 1f };
         public float[] tint = { 1f, 1f, 1f, 1f };
         public float smoothness = 0.2f;
         public bool transparent;
@@ -80,5 +82,7 @@ namespace MemoriStudios.TJBake.Format
         public string anchor = "";
         public string role = "prop";
         public List<int> lods = new() { 0, 1 };
+        // Free text for the host game; TJBake only carries it.
+        public string tag = "";
     }
 }

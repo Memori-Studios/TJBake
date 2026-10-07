@@ -31,7 +31,10 @@ namespace MemoriStudios.TJBake
         };
 
         /// <summary>Throws <see cref="GpuAnimFormatException"/> naming the first rule the manifest breaks. Files are checked to exist, not parsed.</summary>
-        public static void ValidateManifest(UnitJson json, string folder)
+        /// <summary>Texture names with this prefix name an asset the host loads itself; only a host that passes a resolver accepts them.</summary>
+        public const string HostTexturePrefix = "asset:";
+
+        public static void ValidateManifest(UnitJson json, string folder, bool hostTextures = false)
         {
             if (json.format != 1) throw new GpuAnimFormatException($"unit.json format {json.format} is not 1");
             bool rider = json.kind == "rider";
@@ -79,7 +82,8 @@ namespace MemoriStudios.TJBake
                     if (a.role != "prop")
                     {
                         roleCounts.TryGetValue(a.role, out int n);
-                        if (n >= 1) throw new GpuAnimFormatException($"more than one attachment has role '{a.role}'");
+                        // The rider sits on one saddle; repeated weapons are left to the host's own rules.
+                        if (n >= 1 && a.role == "saddle") throw new GpuAnimFormatException("more than one attachment has role 'saddle'");
                         roleCounts[a.role] = n + 1;
                         if (a.role == "saddle") hasSaddle = true;
                     }
@@ -89,9 +93,9 @@ namespace MemoriStudios.TJBake
             foreach (MaterialJson m in json.materials)
             {
                 if (string.IsNullOrEmpty(m.baseColor)) throw new GpuAnimFormatException($"material '{m.name}' has no baseColor texture");
-                CheckFile(folder, m.baseColor);
-                if (!string.IsNullOrEmpty(m.normal)) CheckFile(folder, m.normal);
-                if (!string.IsNullOrEmpty(m.emission)) CheckFile(folder, m.emission);
+                CheckTexture(folder, m.baseColor, hostTextures);
+                if (!string.IsNullOrEmpty(m.normal)) CheckTexture(folder, m.normal, hostTextures);
+                if (!string.IsNullOrEmpty(m.emission)) CheckTexture(folder, m.emission, hostTextures);
             }
             if (!rider && !string.IsNullOrEmpty(json.rider) && !File.Exists(Path.Combine(folder, json.rider, TJBakeVisualLoader.ManifestName))) throw new GpuAnimFormatException("rider folder has no unit.json");
             CheckFile(folder, "anim.bin");
@@ -102,6 +106,16 @@ namespace MemoriStudios.TJBake
         {
             CheckFile(folder, file);
             if (material < 0 || material >= materialCount) throw new GpuAnimFormatException($"{file} uses material {material} of {materialCount}");
+        }
+
+        private static void CheckTexture(string folder, string file, bool hostTextures)
+        {
+            if (file.StartsWith(HostTexturePrefix))
+            {
+                if (!hostTextures) throw new GpuAnimFormatException($"'{file}' names a host asset, which only the game's own visuals may use");
+                return;
+            }
+            CheckFile(folder, file);
         }
 
         private static void CheckFile(string folder, string file)

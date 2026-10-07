@@ -73,5 +73,6 @@ namespace MemoriStudios.TJBake
         // Bit i set = shown at LOD i.
         public int LodMask = 0b11;
         public Bounds Bounds;
+        public string Tag = "";
     }
 }
