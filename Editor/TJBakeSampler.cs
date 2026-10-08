@@ -88,6 +88,9 @@ namespace MemoriStudios.TJBake.Editor
         public Func<Texture2D, string> TextureReference;
         // A rig with no skinned mesh (an invisible clock that only times its slots) bakes a one-millimetre triangle instead of failing.
         public bool PlaceholderWhenNoMesh;
+        // Optional: called with the current step and the fraction of this bake done (0 to 1); return true to cancel.
+        // A cancel throws OperationCanceledException, possibly after some files are written to OutputFolder.
+        public Func<string, float, bool> Progress;
     }
 
     /// <summary>Samples a rig's clips into the TJBake file format: bone matrices per frame, anchor matrices, meshes, textures and the manifest.</summary>
@@ -99,7 +102,14 @@ namespace MemoriStudios.TJBake.Editor
             if (r.Root == null) throw new ArgumentException("the request has no root instance");
             if (string.IsNullOrEmpty(r.OutputFolder)) throw new ArgumentException("the request has no output folder");
             Directory.CreateDirectory(r.OutputFolder);
-            UnitJson json = BakeOne(r, report);
+            Func<string, float, bool> whole = r.Progress, unitProgress = whole;
+            if (whole != null)
+            {
+                float unitEnd = r.Rider != null ? RiderStart : ManifestStart;
+                unitProgress = (step, f) => whole(step, f * unitEnd);
+                if (r.Rider != null) r.Rider.Progress = (step, f) => whole("rider: " + step, RiderStart + f * (ManifestStart - RiderStart));
+            }
+            UnitJson json = BakeOne(r, report, unitProgress);
             if (r.Rider != null)
             {
                 r.Rider.IsRider = true;
@@ -107,13 +117,23 @@ namespace MemoriStudios.TJBake.Editor
                 r.Rider.OutputFolder = Path.Combine(r.OutputFolder, "rider");
                 Directory.CreateDirectory(r.Rider.OutputFolder);
                 report.AppendLine("rider:");
-                UnitJson riderJson = BakeOne(r.Rider, report);
+                UnitJson riderJson = BakeOne(r.Rider, report, r.Rider.Progress);
                 File.WriteAllText(Path.Combine(r.Rider.OutputFolder, TJBakeVisualLoader.ManifestName), JsonUtility.ToJson(riderJson, true));
                 json.rider = "rider/";
             }
+            Step(r.Progress, "writing the manifest", ManifestStart);
             File.WriteAllText(Path.Combine(r.OutputFolder, TJBakeVisualLoader.ManifestName), JsonUtility.ToJson(json, true));
             TJBakeValidation.ValidateManifest(json, r.OutputFolder, r.TextureReference != null);
             return json;
+        }
+
+        // Shares of one bake's progress: the unit, then its rider, then the manifest.
+        private const float RiderStart = 0.75f;
+        private const float ManifestStart = 0.98f;
+
+        private static void Step(Func<string, float, bool> progress, string step, float fraction)
+        {
+            if (progress != null && progress(step, fraction)) throw new OperationCanceledException("TJBake: bake cancelled");
         }
         #endregion
 
@@ -336,8 +356,9 @@ namespace MemoriStudios.TJBake.Editor
         #endregion
 
         #region Sampling
-        private static UnitJson BakeOne(TJBakeRequest r, StringBuilder report)
+        private static UnitJson BakeOne(TJBakeRequest r, StringBuilder report, Func<string, float, bool> progress)
         {
+            Step(progress, "reading meshes", 0f);
             int required = r.IsRider ? TJBakeValidation.RiderSlotCount : TJBakeValidation.UnitSlotCount;
             if (r.Slots.Count < required) throw new Exception($"{r.Slots.Count} slots, {required} needed");
             for (int i = 0; i < r.Slots.Count; i++) if (r.Slots[i].Clip == null) throw new Exception($"slot {i} ({r.Slots[i].Name}) has no clip");
@@ -412,6 +433,7 @@ namespace MemoriStudios.TJBake.Editor
             {
                 AnimationClip clip = r.Slots[s].Clip;
                 bool loop = r.Slots[s].Loop;
+                Step(progress, $"sampling slot {s + 1} of {r.Slots.Count} ({r.Slots[s].Name})", 0.05f + 0.8f * frame / totalFrames);
                 for (int f = 0; f < frameCounts[s]; f++, frame++)
                 {
                     float t = loop ? (f / (float)r.Fps) % Mathf.Max(clip.length, 0.0001f) : Mathf.Min(f / (float)r.Fps, clip.length);
@@ -437,10 +459,12 @@ namespace MemoriStudios.TJBake.Editor
                     for (int b = 0; b < bodies.Count; b++) Union(bodies[b], skinLod0, ref bodyMin[b], ref bodyMax[b]);
                 }
             }
+            Step(progress, "writing animation", 0.85f);
             AnimBin.Write(Path.Combine(r.OutputFolder, "anim.bin"), boneCount, totalFrames, matrices);
             if (anchorNames.Count > 0) AnchorsBin.Write(Path.Combine(r.OutputFolder, "anchors.bin"), anchorNames.Count, totalFrames, anchorMatrices);
 
             // Materials, meshes, props, manifest.
+            Step(progress, "writing meshes and textures", 0.9f);
             var materialIndex = new Dictionary<Material, int>();
             int variantCount = r.ExtraVariants.Count + 1;
             var variants = new List<VariantJson>();

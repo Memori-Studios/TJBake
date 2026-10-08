@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- Optional progress callback (`TJBakeRequest.Progress`, a `Func<string, float, bool>`): it gets the current step
+  (reading meshes, sampling each slot, writing animation, writing meshes and textures, writing the manifest; a rider's
+  steps start with `rider:`) and the fraction of the bake done, from 0 to 1. Return true to cancel; the bake then
+  throws `OperationCanceledException` and may leave some files in the output folder, so bake into a temporary folder
+  if a cancel must keep the old output. Left null, the bake behaves exactly as before.
+
 ## [0.2.0] - 2026-10-07
 
 - Several variants in one bake (`TJBakeRequest.ExtraVariants`): later rigs bind to the first rig's skeleton by bone
