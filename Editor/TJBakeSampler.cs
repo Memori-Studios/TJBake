@@ -520,7 +520,8 @@ namespace MemoriStudios.TJBake.Editor
             animator.Update(0f);
             foreach (Animator child in r.Root.GetComponentsInChildren<Animator>(true))
             {
-                if (child == animator || child.runtimeAnimatorController == null) continue;
+                // A disabled Animator never plays in game; driving it would overwrite the root's pose with its default state.
+                if (child == animator || !child.enabled || child.runtimeAnimatorController == null) continue;
                 child.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                 child.applyRootMotion = false;
                 child.Rebind();
