@@ -642,11 +642,14 @@ namespace MemoriStudios.TJBake.Editor
             else if (baseMap == null) WriteSolidPng(Path.Combine(folder, baseName), material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white);
             else ExportPng(baseMap, Path.Combine(folder, baseName));
             Color tint = material.HasProperty("_BaseColor") && baseMap != null ? material.GetColor("_BaseColor") : Color.white;
+            // A custom graph keeps its opacity in _Alpha and its transparency in the shader's queue, not in Lit's _Surface.
+            if (material.HasProperty("_Alpha")) tint.a *= material.GetFloat("_Alpha");
             var entry = new MaterialJson
             {
                 name = material.name, baseColor = baseName, tint = new[] { tint.r, tint.g, tint.b, tint.a },
                 smoothness = material.HasProperty("_Smoothness") ? material.GetFloat("_Smoothness") : 0.2f,
-                transparent = material.HasProperty("_Surface") && material.GetFloat("_Surface") > 0.5f,
+                transparent = (material.HasProperty("_Surface") && material.GetFloat("_Surface") > 0.5f)
+                    || material.renderQueue >= (int)UnityEngine.Rendering.RenderQueue.Transparent,
             };
             Texture2D normal = material.HasProperty("_BumpMap") ? material.GetTexture("_BumpMap") as Texture2D : null;
             if (normal != null && material.IsKeywordEnabled("_NORMALMAP"))
@@ -661,9 +664,23 @@ namespace MemoriStudios.TJBake.Editor
                 if (entry.emission == null) { entry.emission = $"mat_{i}_emission.png"; ExportPng(emission, Path.Combine(folder, entry.emission)); }
                 if (material.HasProperty("_EmissionColor")) { Color glow = material.GetColor("_EmissionColor"); entry.emissionColor = new[] { glow.r, glow.g, glow.b, glow.a }; }
             }
+            else if (HasColor(material, "_Emission") && material.GetColor("_Emission").maxColorComponent > 0f)
+            {
+                // A flat glow colour with no map: a white map lets the emission colour carry the whole glow.
+                entry.emission = $"mat_{i}_emission.png";
+                WriteSolidPng(Path.Combine(folder, entry.emission), Color.white);
+                Color glow = material.GetColor("_Emission");
+                entry.emissionColor = new[] { glow.r, glow.g, glow.b, 1f };
+            }
             json.materials.Add(entry);
             report.AppendLine($"  material {i}: {material.name} base={(baseMap != null ? baseMap.name : "solid")}");
             return i;
+        }
+
+        private static bool HasColor(Material material, string name)
+        {
+            int index = material.shader.FindPropertyIndex(name);
+            return index >= 0 && material.shader.GetPropertyType(index) == UnityEngine.Rendering.ShaderPropertyType.Color;
         }
 
         public static Texture2D FindBaseMap(Material material)
