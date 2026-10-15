@@ -637,10 +637,12 @@ namespace MemoriStudios.TJBake.Editor
             index[material] = i;
             string baseName = $"mat_{i}_base.png";
             Texture2D baseMap = FindBaseMap(material);
-            string baseRef = baseMap != null ? reference?.Invoke(baseMap) : null;
+            // A custom graph with _Alpha ignores the base map's alpha, and the unit shader would multiply it in.
+            bool dropBaseAlpha = material.HasProperty("_Alpha");
+            string baseRef = baseMap != null && !dropBaseAlpha ? reference?.Invoke(baseMap) : null;
             if (baseRef != null) baseName = baseRef;
             else if (baseMap == null) WriteSolidPng(Path.Combine(folder, baseName), material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white);
-            else ExportPng(baseMap, Path.Combine(folder, baseName));
+            else ExportPng(baseMap, Path.Combine(folder, baseName), dropBaseAlpha);
             Color tint = material.HasProperty("_BaseColor") && baseMap != null ? material.GetColor("_BaseColor") : Color.white;
             // A custom graph keeps its opacity in _Alpha and its transparency in the shader's queue, not in Lit's _Surface.
             if (material.HasProperty("_Alpha")) tint.a *= material.GetFloat("_Alpha");
@@ -696,16 +698,22 @@ namespace MemoriStudios.TJBake.Editor
             return null;
         }
 
-        private static void ExportPng(Texture2D texture, string path)
+        private static void ExportPng(Texture2D texture, string path, bool dropAlpha = false)
         {
             string assetPath = AssetDatabase.GetAssetPath(texture);
-            if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) { File.Copy(assetPath, path, true); return; }
+            if (!dropAlpha && !string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) { File.Copy(assetPath, path, true); return; }
             var rt = RenderTexture.GetTemporary(texture.width, texture.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             Graphics.Blit(texture, rt);
             RenderTexture previous = RenderTexture.active;
             RenderTexture.active = rt;
             var readable = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
             readable.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
+            if (dropAlpha)
+            {
+                Color32[] pixels = readable.GetPixels32();
+                for (int p = 0; p < pixels.Length; p++) pixels[p].a = 255;
+                readable.SetPixels32(pixels);
+            }
             readable.Apply();
             RenderTexture.active = previous;
             RenderTexture.ReleaseTemporary(rt);
