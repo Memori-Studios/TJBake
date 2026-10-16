@@ -331,6 +331,8 @@ namespace MemoriStudios.TJBake.Editor
                     var nrm = normals != null && normals.Length == vertices.Length ? new float3[vertices.Length] : null;
                     var tan = tangents != null && tangents.Length == vertices.Length ? new float4[vertices.Length] : null;
                     var min = new float3(float.MaxValue); var max = new float3(float.MinValue);
+                    // A mirrored child (negative scale) turns its faces inside out unless the winding flips too.
+                    bool mirrored = local.determinant < 0f;
                     for (int i = 0; i < vertices.Length; i++)
                     {
                         pos[i] = local.MultiplyPoint3x4(vertices[i]);
@@ -342,6 +344,7 @@ namespace MemoriStudios.TJBake.Editor
                     {
                         int[] tris = mesh.GetTriangles(s);
                         if (tris.Length == 0) continue;
+                        if (mirrored) for (int t = 0; t + 2 < tris.Length; t += 3) (tris[t + 1], tris[t + 2]) = (tris[t + 2], tris[t + 1]);
                         props.Add(new PropPart
                         {
                             Mesh = new MeshBinData { Positions = pos, Normals = nrm, Tangents = tan, Uv0 = ToFloat2(mesh.uv), Indices = tris, BoundsMin = min, BoundsMax = max },
