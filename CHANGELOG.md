@@ -1,7 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.1] - 2026-10-19
 
+- `TJBake/Unit` compiles on URP 17.6 (Unity 6.6). URP 17.6's `LitForwardPass.hlsl` includes `LitInput.hlsl` and
+  `SurfaceType.hlsl` itself and calls an argument-free `IsSurfaceTypeTransparent()`; `TJBakeInput.hlsl` now keeps both
+  files out by their include guards and supplies that function from `_Surface`. On URP 17.3 the guards are never hit.
 - Optional progress callback (`TJBakeRequest.Progress`, a `Func<string, float, bool>`): it gets the current step
   (reading meshes, sampling each slot, writing animation, writing meshes and textures, writing the manifest; a rider's
   steps start with `rider:`) and the fraction of the bake done, from 0 to 1. Return true to cancel; the bake then
