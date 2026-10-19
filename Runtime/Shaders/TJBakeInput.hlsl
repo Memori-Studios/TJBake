@@ -9,6 +9,11 @@
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SurfaceInput.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DBuffer.hlsl"
 
+// URP 17.6's LitForwardPass includes LitInput itself; this file replaces it, so LitInput's guard keeps it out.
+#define UNIVERSAL_LIT_INPUT_INCLUDED
+// URP 17.6's SurfaceType.hlsl would redeclare _Surface; its guard keeps it out and the overload below stands in.
+#define UNIVERSAL_SURFACE_TYPE_TRANSPARENT_INCLUDED
+
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
     half4 _BaseColor;
@@ -34,6 +39,12 @@ CBUFFER_END
     #define TJBAKE_CUR  _GpuAnimCur
     #define TJBAKE_PREV _GpuAnimPrev
 #endif
+
+// URP 17.6's forward pass asks without an argument; 17.3's passed _Surface, so both read the material's surface type.
+inline bool IsSurfaceTypeTransparent()
+{
+    return IsSurfaceTypeTransparent(_Surface);
+}
 
 inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData outSurfaceData)
 {
