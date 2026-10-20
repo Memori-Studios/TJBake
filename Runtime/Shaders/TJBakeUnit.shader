@@ -46,6 +46,13 @@ Shader "TJBake/Unit"
         [NoScaleOffset] _BoneTex("Bone Matrices", 2D) = "black" {}
         [HideInInspector] _GpuAnimCur("Animation state", Vector) = (0, 0, 0, 0)
         [HideInInspector] _GpuAnimPrev("Previous clip state", Vector) = (0, 0, 0, 0)
+
+        // Alpha 0 means this unit never shows blood.
+        _BloodColor("Blood", Color) = (0, 0, 0, 0)
+        [NoScaleOffset] _BloodMask("Blood Mask", 2D) = "black" {}
+        _BloodTiling("Blood Tiling", Float) = 1.2
+        _BloodGloss("Blood Gloss", Range(0.0, 1.0)) = 0.6
+        [HideInInspector] _UnitBlood("Blood state", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -66,7 +73,7 @@ Shader "TJBake/Unit"
             HLSLPROGRAM
             #pragma target 4.5
             #pragma vertex TJBakeForwardVertex
-            #pragma fragment LitPassFragment
+            #pragma fragment TJBakeForwardFragment
 
             #pragma shader_feature_local _NORMALMAP
             #pragma shader_feature_local _RECEIVE_SHADOWS_OFF
@@ -118,7 +125,15 @@ Shader "TJBake/Unit"
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
-            Varyings TJBakeForwardVertex(TJBakeAttributes v)
+            // URP's Varyings plus the bind-pose position and normal, so the blood mask sits still on the body in every pose.
+            struct TJBakeVaryings
+            {
+                Varyings lit;
+                float3 bindPosOS : TEXCOORD11;
+                float3 bindNormalOS : TEXCOORD12;
+            };
+
+            TJBakeVaryings TJBakeForwardVertex(TJBakeAttributes v)
             {
                 UNITY_SETUP_INSTANCE_ID(v);
                 Attributes a = (Attributes)0;
@@ -129,12 +144,54 @@ Shader "TJBake/Unit"
                 a.staticLightmapUV = v.staticLightmapUV;
                 a.dynamicLightmapUV = v.dynamicLightmapUV;
                 UNITY_TRANSFER_INSTANCE_ID(v, a);
+                TJBakeVaryings o;
+                o.bindPosOS = v.positionOS.xyz;
+                o.bindNormalOS = v.normalOS;
                 float3 p = a.positionOS.xyz, n = a.normalOS, t = a.tangentOS.xyz;
                 TJBakeSkin(v.boneIndices, v.boneWeights, p, n, t);
                 a.positionOS.xyz = p;
                 a.normalOS = n;
                 a.tangentOS.xyz = t;
-                return LitPassVertex(a);
+                o.lit = LitPassVertex(a);
+                return o;
+            }
+
+            // URP's LitPassFragment with the blood stain applied after the surface setup. No parallax: the shader has no height map.
+            void TJBakeForwardFragment(TJBakeVaryings input, out half4 outColor : SV_Target0
+            #ifdef _WRITE_RENDERING_LAYERS
+                , out uint outRenderingLayers : SV_Target1
+            #endif
+            )
+            {
+                UNITY_SETUP_INSTANCE_ID(input.lit);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input.lit);
+
+                SurfaceData surfaceData;
+                InitializeStandardLitSurfaceData(input.lit.uv, surfaceData);
+                TJBakeApplyBlood(input.bindPosOS, input.bindNormalOS, surfaceData);
+
+            #ifdef LOD_FADE_CROSSFADE
+                LODFadeCrossFade(input.lit.positionCS);
+            #endif
+
+                InputData inputData;
+                InitializeInputData(input.lit, surfaceData.normalTS, inputData);
+                SETUP_DEBUG_TEXTURE_DATA(inputData, UNDO_TRANSFORM_TEX(input.lit.uv, _BaseMap));
+
+            #if defined(_DBUFFER)
+                ApplyDecalToSurfaceData(input.lit.positionCS, surfaceData, inputData);
+            #endif
+
+                InitializeBakedGIData(input.lit, inputData);
+
+                half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                color.rgb = MixFog(color.rgb, inputData.fogCoord);
+                color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
+                outColor = color;
+
+            #ifdef _WRITE_RENDERING_LAYERS
+                outRenderingLayers = EncodeMeshRenderingLayer();
+            #endif
             }
             ENDHLSL
         }
