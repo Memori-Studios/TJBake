@@ -35,6 +35,8 @@ CBUFFER_END
 
 TEXTURE2D(_BloodMask);
 SAMPLER(sampler_BloodMask);
+// Global, set by the host's Blood setting: 1 hides every stain. Unset reads 0, so a host that never sets it keeps blood.
+float _UnitBloodOff;
 
 #ifdef UNITY_DOTS_INSTANCING_ENABLED
     UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
@@ -81,7 +83,7 @@ void TJBakeApplyBlood(float3 bindPosOS, float3 bindNormalOS, inout SurfaceData s
 {
     float4 blood = TJBAKE_BLOOD;
     UNITY_BRANCH
-    if (blood.x > 0.0 && _BloodColor.a > 0.0)
+    if (blood.x > 0.0 && _BloodColor.a > 0.0 && _UnitBloodOff < 0.5)
     {
         float3 p = bindPosOS * _BloodTiling + blood.yzy;
         // Triplanar, sharpened so one projection owns each face and the three samples do not average the peaks away.
