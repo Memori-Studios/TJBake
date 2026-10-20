@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2] - 2026-10-20
+
+- `TJBake/Unit` can stain a unit with blood. `_UnitBlood` (per instance: amount 0 to 1, a seed in yz) drives a tiling
+  mask (`_BloodMask`, `_BloodTiling`) projected triplanar in bind-pose model space, so it works on palette-atlas UVs
+  and sits still through every pose; `_BloodColor` (alpha 0 = never) and `_BloodGloss` are per material. The forward
+  pass has its own fragment entry (`TJBakeForwardFragment`, URP's `LitPassFragment` body) and a nested
+  `TJBakeVaryings` carrying the bind-pose position and normal. Nothing changes for a material that leaves the defaults.
+
 ## [0.2.1] - 2026-10-19
 
 - `TJBake/Unit` compiles on URP 17.6 (Unity 6.6). URP 17.6's `LitForwardPass.hlsl` includes `LitInput.hlsl` and
