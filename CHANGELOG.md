@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3] - 2026-10-28
+
+- A prop made of several meshes bakes as one attachment per material, not one per mesh. A host that hides or swaps
+  a prop by its role (a three-piece rifle hidden when the unit draws its sword) now reaches the whole prop. Parts that
+  use different materials, or carry different vertex streams, still bake as separate attachments. Re-bake a unit to
+  pick this up; the file format is unchanged.
+
 ## [0.2.2] - 2026-10-20
 
 - `TJBake/Unit` can stain a unit with blood. `_UnitBlood` (per instance: amount 0 to 1, a seed in yz) drives a tiling

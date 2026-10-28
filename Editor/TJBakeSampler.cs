@@ -354,8 +354,61 @@ namespace MemoriStudios.TJBake.Editor
                     }
                 }
             }
-            return props;
+            return MergeByMaterial(props);
         }
+
+        // A host hides or swaps a prop as one entity, so a prop made of several meshes bakes as one attachment per material.
+        private static List<PropPart> MergeByMaterial(List<PropPart> parts)
+        {
+            var groups = new List<List<PropPart>>();
+            foreach (PropPart p in parts)
+            {
+                List<PropPart> group = groups.Find(g => g[0].Request == p.Request && g[0].Material == p.Material && SameStreams(g[0].Mesh, p.Mesh));
+                if (group == null) groups.Add(new List<PropPart> { p });
+                else group.Add(p);
+            }
+            var merged = new List<PropPart>();
+            foreach (List<PropPart> group in groups)
+            {
+                if (group.Count == 1) { merged.Add(group[0]); continue; }
+                MeshBinData first = group[0].Mesh;
+                var pos = new List<float3>(); var nrm = new List<float3>(); var tan = new List<float4>(); var uv = new List<float2>(); var idx = new List<int>();
+                float3 min = first.BoundsMin, max = first.BoundsMax;
+                foreach (PropPart p in group)
+                {
+                    // Submeshes of one mesh share its vertex array; copy only the vertices this part's triangles use.
+                    var remap = new Dictionary<int, int>();
+                    foreach (int i in p.Mesh.Indices)
+                    {
+                        if (!remap.TryGetValue(i, out int n))
+                        {
+                            n = pos.Count;
+                            remap[i] = n;
+                            pos.Add(p.Mesh.Positions[i]);
+                            if (first.Normals != null) nrm.Add(p.Mesh.Normals[i]);
+                            if (first.Tangents != null) tan.Add(p.Mesh.Tangents[i]);
+                            if (first.Uv0 != null) uv.Add(p.Mesh.Uv0[i]);
+                        }
+                        idx.Add(n);
+                    }
+                    min = math.min(min, p.Mesh.BoundsMin); max = math.max(max, p.Mesh.BoundsMax);
+                }
+                merged.Add(new PropPart
+                {
+                    Mesh = new MeshBinData
+                    {
+                        Positions = pos.ToArray(), Normals = first.Normals != null ? nrm.ToArray() : null, Tangents = first.Tangents != null ? tan.ToArray() : null,
+                        Uv0 = first.Uv0 != null ? uv.ToArray() : null, Indices = idx.ToArray(), BoundsMin = min, BoundsMax = max,
+                    },
+                    Material = group[0].Material,
+                    Request = group[0].Request,
+                });
+            }
+            return merged;
+        }
+
+        private static bool SameStreams(MeshBinData a, MeshBinData b) =>
+            (a.Normals != null) == (b.Normals != null) && (a.Tangents != null) == (b.Tangents != null) && (a.Uv0 != null) == (b.Uv0 != null);
         #endregion
 
         #region Sampling

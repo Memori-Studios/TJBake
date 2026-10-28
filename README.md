@@ -38,7 +38,8 @@ https://github.com/Memori-Studios/TJBake.git
    holds its last frame (deaths). A returning slot hands back at `returnAt`, a fraction of the clip: the time of a clip event whose function or string
    parameter contains `ReturnToIdle`, otherwise 0.9. You can also type it in.
 4. Add anchors for anything the character holds or wears (`Add anchor at bone`), then list the props under
-   **Attachments**: a prop prefab, the anchor it follows, and its role.
+   **Attachments**: a prop prefab, the anchor it follows, and its role. A prop built from several meshes bakes as one
+   attachment per material.
 5. Pick the output folder. For a Tabletop Tavern mod that is `Mods/<YourMod>/unit_visuals/<UnitName>`.
 6. Press **Check**, then **Bake**, then **Preview** to watch it play in the Scene view.
 
