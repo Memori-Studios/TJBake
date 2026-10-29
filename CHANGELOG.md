@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.4] - 2026-10-29
+
+- `TJBake/Unit` can turn a unit to grey stone. `_UnitBlood.w` (per instance, 0 to 1; it was unused) fades the surface
+  to a warm grey that keeps the albedo's light and dark, with low smoothness and no metal. The forward pass applies it
+  after the blood stain. Nothing changes while it is 0.
+
 ## [0.2.3] - 2026-10-28
 
 - A prop made of several meshes bakes as one attachment per material, not one per mesh. A host that hides or swaps

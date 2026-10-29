@@ -52,7 +52,7 @@ Shader "TJBake/Unit"
         [NoScaleOffset] _BloodMask("Blood Mask", 2D) = "black" {}
         _BloodTiling("Blood Tiling", Float) = 1.2
         _BloodGloss("Blood Gloss", Range(0.0, 1.0)) = 0.6
-        [HideInInspector] _UnitBlood("Blood state", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _UnitBlood("Blood and stone state", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -169,6 +169,7 @@ Shader "TJBake/Unit"
                 SurfaceData surfaceData;
                 InitializeStandardLitSurfaceData(input.lit.uv, surfaceData);
                 TJBakeApplyBlood(input.bindPosOS, input.bindNormalOS, surfaceData);
+                TJBakeApplyStone(surfaceData);
 
             #ifdef LOD_FADE_CROSSFADE
                 LODFadeCrossFade(input.lit.positionCS);

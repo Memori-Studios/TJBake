@@ -29,7 +29,7 @@ CBUFFER_START(UnityPerMaterial)
     half4 _BloodColor;
     half _BloodTiling;
     half _BloodGloss;
-    // (amount 0..1, seed u, seed v, unused), per instance.
+    // (blood 0..1, seed u, seed v, stone 0..1), per instance.
     float4 _UnitBlood;
 CBUFFER_END
 
@@ -98,6 +98,21 @@ void TJBakeApplyBlood(float3 bindPosOS, float3 bindNormalOS, inout SurfaceData s
         half stain = smoothstep(threshold, threshold + 0.1, mask) * _BloodColor.a;
         surfaceData.albedo = lerp(surfaceData.albedo, _BloodColor.rgb, stain);
         surfaceData.smoothness = lerp(surfaceData.smoothness, _BloodGloss, stain);
+    }
+}
+
+// Turns this instance to grey stone by its stone amount: the colour goes, the albedo's light and dark stay as carving.
+void TJBakeApplyStone(inout SurfaceData surfaceData)
+{
+    half stone = TJBAKE_BLOOD.w;
+    UNITY_BRANCH
+    if (stone > 0.0)
+    {
+        half grey = dot(surfaceData.albedo, half3(0.299, 0.587, 0.114));
+        half3 rock = (0.2 + 0.7 * grey) * half3(1.0, 0.97, 0.91);
+        surfaceData.albedo = lerp(surfaceData.albedo, rock, stone);
+        surfaceData.smoothness = lerp(surfaceData.smoothness, 0.1, stone);
+        surfaceData.metallic = lerp(surfaceData.metallic, 0.0, stone);
     }
 }
 
