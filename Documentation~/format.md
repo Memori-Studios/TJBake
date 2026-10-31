@@ -15,7 +15,7 @@ Mods/<ModName>/unit_visuals/<UnitName>/
   body_<n>.mesh.bin      one per body mesh (per variant, per LOD, per material slot)
   attach_<n>.mesh.bin    one per attachment mesh
   <texture>.png          every texture the materials name
-  icon.png               optional, the unit's card icon (256x256 RGBA)
+  icon.png               optional, the unit's card icon (512x768 RGBA)
   rider/                 optional, the same layout again with kind "rider"
 ```
 
@@ -154,7 +154,7 @@ Rules: an attachment mesh is never skinned; a body mesh always is. A submesh is 
 ## 6. Textures and icon
 
 PNG, 8-bit RGB or RGBA, power of two not required, at most 4096 on a side. Base colour is sRGB, normal maps are
-tangent-space OpenGL convention linear, emission is sRGB. `icon.png` is 256x256 RGBA; a host may use it as
+tangent-space OpenGL convention linear, emission is sRGB. `icon.png` is 512x768 RGBA, a 2:3 portrait; a host may use it as
 the character's card icon.
 
 ## 7. Validation and failure behaviour
