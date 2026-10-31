@@ -34,6 +34,8 @@ namespace MemoriStudios.TJBake
         private readonly List<Material> _flatMaterials = new();
         private MaterialPropertyBlock _block;
         private TJBakePreviewPlayer _rider;
+        // A rider is stepped by its mount's Tick; its own Update would double its speed and keep it moving on a frozen mount.
+        private bool _drivenByMount;
         private Transform _content;
         private int _idleSlot;
 
@@ -119,6 +121,7 @@ namespace MemoriStudios.TJBake
                 var riderGo = new GameObject("Rider");
                 riderGo.transform.SetParent(saddle, false);
                 _rider = riderGo.AddComponent<TJBakePreviewPlayer>();
+                _rider._drivenByMount = true;
                 _rider.unscaledTime = unscaledTime;
                 _rider.Show(visual.Rider, 0);
             }
@@ -153,7 +156,7 @@ namespace MemoriStudios.TJBake
         private void Update()
         {
             // In edit mode the baker window drives Tick, so the preview moves without entering Play.
-            if (!Application.isPlaying) return;
+            if (!Application.isPlaying || _drivenByMount) return;
             Tick((unscaledTime ? Time.unscaledDeltaTime : Time.deltaTime) * speed);
         }
 
