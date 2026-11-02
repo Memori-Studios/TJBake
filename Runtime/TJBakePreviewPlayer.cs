@@ -123,7 +123,8 @@ namespace MemoriStudios.TJBake
                 _rider = riderGo.AddComponent<TJBakePreviewPlayer>();
                 _rider._drivenByMount = true;
                 _rider.unscaledTime = unscaledTime;
-                _rider.Show(visual.Rider, 0);
+                // The same pairing the game spawns: mount variant v carries rider variant v modulo the rider's count.
+                _rider.Show(visual.Rider, visual.Rider.Variants.Count > 0 ? variant % visual.Rider.Variants.Count : 0);
             }
 
             _state = TJBakePlaybackState.Stopped;
