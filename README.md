@@ -46,6 +46,27 @@ https://github.com/Memori-Studios/TJBake.git
 Optional: add lower-detail prefabs that share the same bone names as LOD1 and LOD2, with a screen-height switch for
 each, and a rider profile for a mounted unit (the mount needs a `saddle` attachment).
 
+## Record a ragdoll death
+
+A death clip can be recorded instead of authored. `TJBakeRagdoll.Record` (Editor only) takes the rig as a torso with
+limbs hanging off it and plays a fall: the torso is one rigid body of joints, each limb a stick that swings from its
+joint within a swing limit, with a floor, friction and gravity, started by a push that is full at the torso's top and
+nothing at its feet. It returns an `AnimationClip` you hand to the baker as a slot like any other.
+
+```csharp
+var rig = new TJBakeRagdollRig { Root = prefab, Pelvis = hips };
+rig.Limbs.Add(new TJBakeRagdollLimb { Bone = head, Tip = new Vector3(0f, 0.28f, 0f), Radius = 0.13f, MaxSwing = 50f });
+rig.Limbs.Add(new TJBakeRagdollLimb { Bone = armL, Tip = new Vector3(0f, -0.7f, 0f) });
+// ... the other limbs: Tip is the free end in the bone's own space.
+var options = new TJBakeRagdollOptions { Push = new Vector3(0f, 1.5f, -4f), Seed = 1 };
+AnimationClip fall = TJBakeRagdoll.Record(rig, options, "death1");
+```
+
+The push is in the root's space, so a negative Z drops a character that faces +Z onto its back. `Variation` lets the
+seed vary the push and jolt the limbs; the same rig, options and seed always record the same clip, so a bake made from
+recordings is repeatable on any machine. Each limb's parent must be part of the torso (limbs hang from the body, not
+from each other), and bones you don't list are left alone.
+
 ## Limits
 
 - 4 bone influences per vertex. Rigs with more are renormalized to their strongest four.

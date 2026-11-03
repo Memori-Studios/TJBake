@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.5] - 2026-11-03
+
+- `TJBakeRagdoll.Record` (Editor) records a ragdoll fall as an `AnimationClip`: the rig's torso is one rigid body of
+  joints and each limb a stick swinging from its joint, solved position-based with a floor, friction and a swing limit,
+  from a push that fades down the torso. The same rig, options and seed record the same clip on any machine, so a host
+  can bake death variations without authoring them, and hand them to the baker as slots like any other clip.
+- The sampler restores the rig's rest pose before every slot. A clip that leaves a bone unkeyed now shows it at rest,
+  not where the previous slot's last frame left it. Re-bake a unit whose clips key only some bones to pick this up.
+
 ## [0.2.4] - 2026-10-29
 
 - `TJBake/Unit` can turn a unit to grey stone. `_UnitBlood.w` (per instance, 0 to 1; it was unused) fades the surface

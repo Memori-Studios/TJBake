@@ -104,6 +104,24 @@ namespace MemoriStudios.TJBake.Tests
         }
 
         [Test]
+        public void Bake_StartsEverySlotFromTheRestPose()
+        {
+            GameObject root = Rig(out Transform bone1, out AnimationClip bend);
+            // A clip that never mentions Bone1: it must show Bone1 at rest, not bent by the slot before.
+            var still = Track(new AnimationClip { name = "Still" });
+            still.SetCurve("Bone0", typeof(Transform), "m_LocalPosition.x", AnimationCurve.Linear(0, 0, 1, 0));
+            TJBakeRequest request = RiderRequest(root, bend, bone1);
+            request.Slots[2].Clip = still;
+            UnitJson json = TJBakeSampler.Bake(request, new StringBuilder());
+
+            SlotJson death = json.slots[2];
+            byte[] texels = AnimBin.Read(File.ReadAllBytes(Path.Combine(_dir, "anim.bin")), out int bones, out _);
+            float3 tip = math.mul(Bone(texels, bones, death.start + death.count - 1, 1), new float4(0, 2, 0, 1));
+            Assert.That(math.distance(tip, new float3(0, 2, 0)), Is.LessThan(0.01f), $"tip at {tip}");
+            Assert.That(Quaternion.Angle(bone1.localRotation, Quaternion.identity), Is.LessThan(0.01f), "the rig is back at rest after the bake");
+        }
+
+        [Test]
         public void Bake_WritesSlotFlagsAndAnAnimationInclusiveBox()
         {
             GameObject root = Rig(out Transform bone1, out AnimationClip clip);

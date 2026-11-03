@@ -479,6 +479,8 @@ namespace MemoriStudios.TJBake.Editor
             for (int b = 0; b < bodies.Count; b++) { bodyMin[b] = new float3(float.MaxValue); bodyMax[b] = new float3(float.MinValue); }
             Matrix4x4 scale = Matrix4x4.TRS(r.RootOffset, Quaternion.identity, new Vector3(r.RootScale, r.RootScale, r.RootScale));
             Animator animator = PrepareAnimator(r, out List<Animator> nestedAnimators);
+            // Every slot starts from the rig as handed in, so a clip that leaves a bone unkeyed shows it at rest, not where the last clip left it.
+            var rest = new RestPose(r.Root, r.LodRoots);
             Vector3 rootPosition = r.Root.transform.position;
             Quaternion rootRotation = r.Root.transform.rotation;
             Matrix4x4 rootInv = r.Root.transform.worldToLocalMatrix;
@@ -490,6 +492,7 @@ namespace MemoriStudios.TJBake.Editor
                 AnimationClip clip = r.Slots[s].Clip;
                 bool loop = r.Slots[s].Loop;
                 Step(progress, $"sampling slot {s + 1} of {r.Slots.Count} ({r.Slots[s].Name})", 0.05f + 0.8f * frame / totalFrames);
+                rest.Restore();
                 for (int f = 0; f < frameCounts[s]; f++, frame++)
                 {
                     float t = loop ? (f / (float)r.Fps) % Mathf.Max(clip.length, 0.0001f) : Mathf.Min(f / (float)r.Fps, clip.length);
@@ -515,6 +518,7 @@ namespace MemoriStudios.TJBake.Editor
                     for (int b = 0; b < bodies.Count; b++) Union(bodies[b], skinLod0, ref bodyMin[b], ref bodyMax[b]);
                 }
             }
+            rest.Restore();
             Step(progress, "writing animation", 0.85f);
             AnimBin.Write(Path.Combine(r.OutputFolder, "anim.bin"), boneCount, totalFrames, matrices);
             if (anchorNames.Count > 0) AnchorsBin.Write(Path.Combine(r.OutputFolder, "anchors.bin"), anchorNames.Count, totalFrames, anchorMatrices);
@@ -559,6 +563,42 @@ namespace MemoriStudios.TJBake.Editor
             json.variants.AddRange(variants);
             report.AppendLine($"{r.UnitName}{(r.IsRider ? " rider" : "")}: {boneCount} bones, {totalFrames} frames, {variantCount} variant(s), {bodies.Count} body meshes over {r.LodRoots.Count + 1} LOD(s), {props.Count} props, {json.materials.Count} materials, scale {r.RootScale}");
             return json;
+        }
+
+        /// <summary>The local position, rotation and scale of every transform under the roots when the bake began.</summary>
+        private sealed class RestPose
+        {
+            private readonly Transform[] _transforms;
+            private readonly Vector3[] _positions;
+            private readonly Quaternion[] _rotations;
+            private readonly Vector3[] _scales;
+
+            public RestPose(GameObject root, List<GameObject> lodRoots)
+            {
+                var all = new List<Transform>(root.GetComponentsInChildren<Transform>(true));
+                foreach (GameObject lodRoot in lodRoots) all.AddRange(lodRoot.GetComponentsInChildren<Transform>(true));
+                _transforms = all.ToArray();
+                _positions = new Vector3[_transforms.Length];
+                _rotations = new Quaternion[_transforms.Length];
+                _scales = new Vector3[_transforms.Length];
+                for (int i = 0; i < _transforms.Length; i++)
+                {
+                    _positions[i] = _transforms[i].localPosition;
+                    _rotations[i] = _transforms[i].localRotation;
+                    _scales[i] = _transforms[i].localScale;
+                }
+            }
+
+            public void Restore()
+            {
+                for (int i = 0; i < _transforms.Length; i++)
+                {
+                    if (_transforms[i] == null) continue;
+                    _transforms[i].localPosition = _positions[i];
+                    _transforms[i].localRotation = _rotations[i];
+                    _transforms[i].localScale = _scales[i];
+                }
+            }
         }
 
         // The root's Animator when any slot names a state, rebound so every layer starts at its default state.
