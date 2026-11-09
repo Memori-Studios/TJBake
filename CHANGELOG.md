@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.6] - 2026-11-09
+
+- `TJBake/Unit` can flash a unit white when it is struck. `_UnitFlash` (per instance, 0 to 1) washes the albedo and the
+  emission toward white, so the flash reads in shade too. Unset reads 0, so a host that never writes it is unchanged.
+
 ## [0.2.5] - 2026-11-03
 
 - `TJBakeRagdoll.Record` (Editor) records a ragdoll fall as an `AnimationClip`: the rig's torso is one rigid body of

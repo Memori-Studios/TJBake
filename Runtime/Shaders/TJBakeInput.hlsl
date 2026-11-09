@@ -31,6 +31,8 @@ CBUFFER_START(UnityPerMaterial)
     half _BloodGloss;
     // (blood 0..1, seed u, seed v, stone 0..1), per instance.
     float4 _UnitBlood;
+    // 0..1, per instance: how far toward flat white a struck unit is drawn.
+    float _UnitFlash;
 CBUFFER_END
 
 TEXTURE2D(_BloodMask);
@@ -43,14 +45,17 @@ float _UnitBloodOff;
         UNITY_DOTS_INSTANCED_PROP(float4, _GpuAnimCur)
         UNITY_DOTS_INSTANCED_PROP(float4, _GpuAnimPrev)
         UNITY_DOTS_INSTANCED_PROP(float4, _UnitBlood)
+        UNITY_DOTS_INSTANCED_PROP(float, _UnitFlash)
     UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
     #define TJBAKE_CUR   UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _GpuAnimCur)
     #define TJBAKE_PREV  UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _GpuAnimPrev)
     #define TJBAKE_BLOOD UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _UnitBlood)
+    #define TJBAKE_FLASH UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _UnitFlash)
 #else
     #define TJBAKE_CUR   _GpuAnimCur
     #define TJBAKE_PREV  _GpuAnimPrev
     #define TJBAKE_BLOOD _UnitBlood
+    #define TJBAKE_FLASH _UnitFlash
 #endif
 
 // URP 17.6's forward pass asks without an argument; 17.3's passed _Surface, so both read the material's surface type.
@@ -113,6 +118,18 @@ void TJBakeApplyStone(inout SurfaceData surfaceData)
         surfaceData.albedo = lerp(surfaceData.albedo, rock, stone);
         surfaceData.smoothness = lerp(surfaceData.smoothness, 0.1, stone);
         surfaceData.metallic = lerp(surfaceData.metallic, 0.0, stone);
+    }
+}
+
+// Washes this instance toward white by its flash amount. The white is emitted, so it reads in shade and at night too.
+void TJBakeApplyFlash(inout SurfaceData surfaceData)
+{
+    half flash = TJBAKE_FLASH;
+    UNITY_BRANCH
+    if (flash > 0.0)
+    {
+        surfaceData.albedo = lerp(surfaceData.albedo, half3(1.0, 1.0, 1.0), flash);
+        surfaceData.emission = lerp(surfaceData.emission, half3(1.0, 1.0, 1.0), flash);
     }
 }
 
