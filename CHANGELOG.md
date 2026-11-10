@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.9] - 2026-11-10
+
+- `TJBake/Unit` can keep units readable against the ground, from four globals a host sets from its look. Unset they
+  read 0, so a host that never sets them is unchanged.
+  - `_UnitBodyFloor`: a soft least luminance (linear, before post) for a unit's lit colour, in the unit's own hue: black
+    is drawn at the floor, a pixel far above it is unchanged, and shading between keeps its steps.
+  - `_UnitRimColor` (linear rgb, and the fresnel power in w) and `_UnitRimShape` (strength near, strength far, near
+    metres, far metres): a rim light that grows with distance from the camera. It takes the unit's `_UnitTint` as the
+    tint takes the body, and fades as `_UnitFlash` rises, so a tint and a hit still read over it.
+  - `_UnitShadowOff`: 1 collapses the shadow caster before skinning, for a host that draws its own blob under each unit.
+- `_UnitOutline` with a width below 0 marks a still body, such as a corpse: no outline, and no rim or floor.
+
 ## [0.2.8] - 2026-11-10
 
 - `TJBake/Unit` can outline a unit. `_UnitOutline` (per instance; linear rgb, and a width in w) draws an inverted hull:

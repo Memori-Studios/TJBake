@@ -192,6 +192,7 @@ Shader "TJBake/Unit"
                 InitializeBakedGIData(input.lit, inputData);
 
                 half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                TJBakeApplyReadability(inputData.positionWS, inputData.normalWS, inputData.viewDirectionWS, surfaceData.albedo, color.rgb);
                 color.rgb = MixFog(color.rgb, inputData.fogCoord);
                 color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
                 outColor = color;
@@ -315,6 +316,14 @@ Shader "TJBake/Unit"
             Varyings TJBakeShadowVertex(TJBakeAttributes v)
             {
                 UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_BRANCH
+                if (_UnitShadowOff > 0.5)
+                {
+                    // Every vertex at one point outside the view: no shadow, and no skinning paid for it.
+                    Varyings none = (Varyings)0;
+                    none.positionCS = float4(2.0, 2.0, 2.0, 1.0);
+                    return none;
+                }
                 Attributes a = (Attributes)0;
                 a.positionOS = v.positionOS;
                 a.normalOS = v.normalOS;
