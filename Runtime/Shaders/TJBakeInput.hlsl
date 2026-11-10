@@ -54,8 +54,6 @@ float4 _UnitRimShape;
 float _UnitBodyFloor;
 // 1 casts no shadow, for a host that draws its own blob under each unit.
 float _UnitShadowOff;
-// Extra saturation for a unit's own colours: 0 leaves them, 1 doubles their distance from grey.
-float _UnitSaturation;
 
 #ifdef UNITY_DOTS_INSTANCING_ENABLED
     UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
@@ -165,15 +163,6 @@ void TJBakeApplyFlash(inout SurfaceData surfaceData)
         surfaceData.albedo = lerp(surfaceData.albedo, half3(1.0, 1.0, 1.0), flash);
         surfaceData.emission = lerp(surfaceData.emission, half3(1.0, 1.0, 1.0), flash);
     }
-}
-
-// Pushes a living unit's own colours away from grey, before blood, tint and flash, so those keep their colours.
-void TJBakeApplySaturation(inout SurfaceData surfaceData)
-{
-    UNITY_BRANCH
-    if (_UnitSaturation <= 0.0 || TJBAKE_OUTLINE.w < 0.0) return;
-    half grey = dot(surfaceData.albedo, half3(0.2126729h, 0.7151522h, 0.0721750h));
-    surfaceData.albedo = max(lerp(grey.xxx, surfaceData.albedo, 1.0h + (half)_UnitSaturation), 0.0h);
 }
 
 // Lifts a dark body toward the look's floor in its own hue, then adds a rim that grows with distance. The rim takes the unit's

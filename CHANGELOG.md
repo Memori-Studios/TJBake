@@ -10,8 +10,6 @@
     metres, far metres): a rim light that grows with distance from the camera. It takes the unit's `_UnitTint` as the
     tint takes the body, and fades as `_UnitFlash` rises, so a tint and a hit still read over it.
   - `_UnitShadowOff`: 1 collapses the shadow caster before skinning, for a host that draws its own blob under each unit.
-- `_UnitSaturation`, a fifth global: extra saturation for a living unit's own colours (0 leaves them, 1 doubles their
-  distance from grey), applied before blood, tint and flash.
 - `_UnitOutline` with a width below 0 marks a still body, such as a corpse: no outline, and no rim or floor.
 
 ## [0.2.8] - 2026-11-10

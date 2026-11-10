@@ -171,7 +171,6 @@ Shader "TJBake/Unit"
 
                 SurfaceData surfaceData;
                 InitializeStandardLitSurfaceData(input.lit.uv, surfaceData);
-                TJBakeApplySaturation(surfaceData);
                 TJBakeApplyBlood(input.bindPosOS, input.bindNormalOS, surfaceData);
                 TJBakeApplyStone(surfaceData);
                 // The tint goes on before the flash, so a struck unit still flashes white over it.
