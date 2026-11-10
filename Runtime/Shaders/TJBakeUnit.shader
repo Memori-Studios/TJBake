@@ -54,6 +54,7 @@ Shader "TJBake/Unit"
         _BloodGloss("Blood Gloss", Range(0.0, 1.0)) = 0.6
         [HideInInspector] _UnitBlood("Blood and stone state", Vector) = (0, 0, 0, 0)
         [HideInInspector] _UnitFlash("Hit flash", Float) = 0
+        [HideInInspector] _UnitTint("Tint and its strength", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -171,6 +172,8 @@ Shader "TJBake/Unit"
                 InitializeStandardLitSurfaceData(input.lit.uv, surfaceData);
                 TJBakeApplyBlood(input.bindPosOS, input.bindNormalOS, surfaceData);
                 TJBakeApplyStone(surfaceData);
+                // The tint goes on before the flash, so a struck unit still flashes white over it.
+                TJBakeApplyTint(surfaceData);
                 TJBakeApplyFlash(surfaceData);
 
             #ifdef LOD_FADE_CROSSFADE

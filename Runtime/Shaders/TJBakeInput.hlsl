@@ -33,6 +33,8 @@ CBUFFER_START(UnityPerMaterial)
     float4 _UnitBlood;
     // 0..1, per instance: how far toward flat white a struck unit is drawn.
     float _UnitFlash;
+    // (r, g, b, strength 0..1), per instance, linear: the colour a unit is cast toward. Strength 0 leaves it as it is.
+    float4 _UnitTint;
 CBUFFER_END
 
 TEXTURE2D(_BloodMask);
@@ -46,16 +48,19 @@ float _UnitBloodOff;
         UNITY_DOTS_INSTANCED_PROP(float4, _GpuAnimPrev)
         UNITY_DOTS_INSTANCED_PROP(float4, _UnitBlood)
         UNITY_DOTS_INSTANCED_PROP(float, _UnitFlash)
+        UNITY_DOTS_INSTANCED_PROP(float4, _UnitTint)
     UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
     #define TJBAKE_CUR   UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _GpuAnimCur)
     #define TJBAKE_PREV  UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _GpuAnimPrev)
     #define TJBAKE_BLOOD UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _UnitBlood)
     #define TJBAKE_FLASH UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _UnitFlash)
+    #define TJBAKE_TINT  UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _UnitTint)
 #else
     #define TJBAKE_CUR   _GpuAnimCur
     #define TJBAKE_PREV  _GpuAnimPrev
     #define TJBAKE_BLOOD _UnitBlood
     #define TJBAKE_FLASH _UnitFlash
+    #define TJBAKE_TINT  _UnitTint
 #endif
 
 // URP 17.6's forward pass asks without an argument; 17.3's passed _Surface, so both read the material's surface type.
@@ -118,6 +123,17 @@ void TJBakeApplyStone(inout SurfaceData surfaceData)
         surfaceData.albedo = lerp(surfaceData.albedo, rock, stone);
         surfaceData.smoothness = lerp(surfaceData.smoothness, 0.1, stone);
         surfaceData.metallic = lerp(surfaceData.metallic, 0.0, stone);
+    }
+}
+
+// Casts this instance toward its tint colour by the tint's strength. Only the albedo changes, so light and shade stay.
+void TJBakeApplyTint(inout SurfaceData surfaceData)
+{
+    half4 tint = TJBAKE_TINT;
+    UNITY_BRANCH
+    if (tint.a > 0.0)
+    {
+        surfaceData.albedo = lerp(surfaceData.albedo, tint.rgb, saturate(tint.a));
     }
 }
 

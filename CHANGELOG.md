@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7] - 2026-11-10
+
+- `TJBake/Unit` can cast a unit toward a colour. `_UnitTint` (per instance; linear rgb, and a strength from 0 to 1 in
+  alpha) blends the albedo toward the colour, after the blood and the stone and before the hit flash, so a struck unit
+  still flashes white over its tint. Light and shade stay, since only the albedo changes. Unset reads 0, so a host that
+  never writes it is unchanged. Only the forward pass reads it; the shadow and depth passes are the same as before.
+
 ## [0.2.6] - 2026-11-09
 
 - `TJBake/Unit` can flash a unit white when it is struck. `_UnitFlash` (per instance, 0 to 1) washes the albedo and the
