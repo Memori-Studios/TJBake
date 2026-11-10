@@ -4,8 +4,8 @@
 
 - `TJBake/Unit` can keep units readable against the ground, from four globals a host sets from its look. Unset they
   read 0, so a host that never sets them is unchanged.
-  - `_UnitBodyFloor`: the least luminance (linear, before post) a unit's lit colour is drawn at. A darker pixel is lifted
-    to it in the unit's own hue.
+  - `_UnitBodyFloor`: a soft least luminance (linear, before post) for a unit's lit colour, in the unit's own hue: black
+    is drawn at the floor, a pixel far above it is unchanged, and shading between keeps its steps.
   - `_UnitRimColor` (linear rgb, and the fresnel power in w) and `_UnitRimShape` (strength near, strength far, near
     metres, far metres): a rim light that grows with distance from the camera. It takes the unit's `_UnitTint` as the
     tint takes the body, and fades as `_UnitFlash` rises, so a tint and a hit still read over it.

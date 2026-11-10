@@ -50,7 +50,7 @@ float _UnitBloodOff;
 float4 _UnitRimColor;
 // (strength near, strength far, near metres, far metres): the rim grows from the near strength to the far one.
 float4 _UnitRimShape;
-// The least luminance, linear and before post, a unit's lit colour is drawn at. It keeps the unit's own hue.
+// A soft least luminance, linear and before post, for a unit's lit colour. It keeps the unit's own hue.
 float _UnitBodyFloor;
 // 1 casts no shadow, for a host that draws its own blob under each unit.
 float _UnitShadowOff;
@@ -165,14 +165,19 @@ void TJBakeApplyFlash(inout SurfaceData surfaceData)
     }
 }
 
-// Lifts a dark body to the look's floor in its own hue, then adds a rim that grows with distance. The rim takes the unit's
+// Lifts a dark body toward the look's floor in its own hue, then adds a rim that grows with distance. The rim takes the unit's
 // tint as the tint takes the body, and fades as the hit flash rises, so a wind-up, a status and a hit still read first.
 void TJBakeApplyReadability(float3 positionWS, half3 normalWS, half3 viewDirectionWS, half3 albedo, inout half3 color)
 {
     UNITY_BRANCH
     if (TJBAKE_OUTLINE.w < 0.0) return;
-    half3 hue = albedo / max(Luminance(albedo), 0.01h);
-    color += hue * max(0.0h, (half)_UnitBodyFloor - Luminance(color));
+    // Rec. 709 luminance weights, as Core RP's Luminance, which not every pass includes.
+    const half3 weights = half3(0.2126729h, 0.7151522h, 0.0721750h);
+    half3 hue = albedo / max(dot(albedo, weights), 0.01h);
+    // A soft floor: far above it nothing changes, at black it gives the floor, and shading between keeps its steps.
+    half luminance = max(dot(color, weights), 0.0h);
+    half floorLuminance = (half)_UnitBodyFloor;
+    color += hue * (sqrt(luminance * luminance + floorLuminance * floorLuminance) - luminance);
 
     float4 shape = _UnitRimShape;
     UNITY_BRANCH
