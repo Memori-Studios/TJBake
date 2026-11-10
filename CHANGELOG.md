@@ -6,8 +6,10 @@
   the back faces again, pushed out along smoothed normals and drawn flat in the colour (fog applies), so a rim shows
   round the body. The width is in thousandths of the distance from the camera, so it holds the same share of the
   screen near and far. It is a pass tagged `SRPDefaultUnlit`, which URP draws in its opaque pass with no renderer
-  feature. Width 0, and unset, draws nothing: the vertex shader collapses the unit before skinning, so a crowd with
-  no outlines pays only the extra vertex calls.
+  feature. Width 0, and unset, draws nothing: the vertex shader collapses the unit before skinning. A collapsed unit
+  still sends its vertices (about 0.5 ms of GPU for 1,600 units on an RTX 5080), so a host with a crowd turns the pass
+  off on the materials of units with no outline, `Material.SetShaderPassEnabled("SRPDefaultUnlit", false)`, and draws
+  outlined units with a copy that has it on.
 - The loader keeps each skinned mesh's normals averaged at every corner in UV5, so the hull holds together at hard
   edges. A mesh without them falls back to its own normals.
 
