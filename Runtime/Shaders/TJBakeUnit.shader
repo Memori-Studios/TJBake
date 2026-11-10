@@ -55,6 +55,7 @@ Shader "TJBake/Unit"
         [HideInInspector] _UnitBlood("Blood and stone state", Vector) = (0, 0, 0, 0)
         [HideInInspector] _UnitFlash("Hit flash", Float) = 0
         [HideInInspector] _UnitTint("Tint and its strength", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _UnitOutline("Outline colour and width", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -198,6 +199,81 @@ Shader "TJBake/Unit"
             #ifdef _WRITE_RENDERING_LAYERS
                 outRenderingLayers = EncodeMeshRenderingLayer();
             #endif
+            }
+            ENDHLSL
+        }
+
+        // An inverted hull: the back faces again, pushed out along smoothed normals and drawn flat in the outline colour,
+        // so a rim shows round the body. URP draws this tag in its opaque pass beside UniversalForward, so no renderer
+        // feature is needed. A unit whose outline width is 0 is collapsed before skinning and costs only the vertex call.
+        Pass
+        {
+            Name "Outline"
+            Tags { "LightMode" = "SRPDefaultUnlit" }
+
+            Cull Front
+            ZWrite On
+            ZTest LEqual
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma vertex TJBakeOutlineVertex
+            #pragma fragment TJBakeOutlineFragment
+
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Fog.hlsl"
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+
+            #include "TJBakeInput.hlsl"
+            #include "TJBakeSkinning.hlsl"
+
+            struct TJBakeOutlineAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float4 boneIndices : TEXCOORD3;
+                float4 boneWeights : TEXCOORD4;
+                // Normals averaged at each corner by the loader; a hard-edged mesh pushed out along its own would split.
+                float3 smoothNormalOS : TEXCOORD5;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct TJBakeOutlineVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                nointerpolation half3 color : TEXCOORD0;
+                half fogFactor : TEXCOORD1;
+            };
+
+            TJBakeOutlineVaryings TJBakeOutlineVertex(TJBakeOutlineAttributes v)
+            {
+                UNITY_SETUP_INSTANCE_ID(v);
+                TJBakeOutlineVaryings o;
+                float4 outline = TJBAKE_OUTLINE;
+                o.color = outline.rgb;
+                o.fogFactor = 0;
+                UNITY_BRANCH
+                if (outline.w <= 0.0)
+                {
+                    // Every vertex at one point outside the view: the triangles have no area and nothing is drawn.
+                    o.positionCS = float4(2.0, 2.0, 2.0, 1.0);
+                    return o;
+                }
+                // A mesh without smoothed normals falls back to its own.
+                float3 p = v.positionOS.xyz, n = any(v.smoothNormalOS) ? v.smoothNormalOS : v.normalOS, t = float3(1, 0, 0);
+                TJBakeSkin(v.boneIndices, v.boneWeights, p, n, t);
+                float3 positionVS = TransformWorldToView(TransformObjectToWorld(p));
+                float3 normalVS = normalize(TransformWorldToViewDir(TransformObjectToWorldNormal(n)));
+                // Wider with distance, so the outline is the same share of the screen near and far.
+                positionVS += normalVS * (-positionVS.z * outline.w / 1000.0);
+                o.positionCS = TransformWViewToHClip(positionVS);
+                o.fogFactor = ComputeFogFactor(o.positionCS.z);
+                return o;
+            }
+
+            half4 TJBakeOutlineFragment(TJBakeOutlineVaryings input) : SV_Target
+            {
+                return half4(MixFog(input.color, input.fogFactor), 1.0);
             }
             ENDHLSL
         }

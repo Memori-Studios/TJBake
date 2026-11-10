@@ -35,6 +35,9 @@ CBUFFER_START(UnityPerMaterial)
     float _UnitFlash;
     // (r, g, b, strength 0..1), per instance, linear: the colour a unit is cast toward. Strength 0 leaves it as it is.
     float4 _UnitTint;
+    // (r, g, b, width), per instance, linear: the outline's colour, and its width in thousandths of the distance from
+    // the camera. Width 0 draws no outline.
+    float4 _UnitOutline;
 CBUFFER_END
 
 TEXTURE2D(_BloodMask);
@@ -49,18 +52,21 @@ float _UnitBloodOff;
         UNITY_DOTS_INSTANCED_PROP(float4, _UnitBlood)
         UNITY_DOTS_INSTANCED_PROP(float, _UnitFlash)
         UNITY_DOTS_INSTANCED_PROP(float4, _UnitTint)
+        UNITY_DOTS_INSTANCED_PROP(float4, _UnitOutline)
     UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
     #define TJBAKE_CUR   UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _GpuAnimCur)
     #define TJBAKE_PREV  UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _GpuAnimPrev)
     #define TJBAKE_BLOOD UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _UnitBlood)
     #define TJBAKE_FLASH UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _UnitFlash)
     #define TJBAKE_TINT  UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _UnitTint)
+    #define TJBAKE_OUTLINE UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _UnitOutline)
 #else
     #define TJBAKE_CUR   _GpuAnimCur
     #define TJBAKE_PREV  _GpuAnimPrev
     #define TJBAKE_BLOOD _UnitBlood
     #define TJBAKE_FLASH _UnitFlash
     #define TJBAKE_TINT  _UnitTint
+    #define TJBAKE_OUTLINE _UnitOutline
 #endif
 
 // URP 17.6's forward pass asks without an argument; 17.3's passed _Surface, so both read the material's surface type.

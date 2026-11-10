@@ -204,7 +204,7 @@ namespace MemoriStudios.TJBake
             return mesh;
         }
 
-        /// <summary>Builds a Mesh from file data. Bone indices ride in UV3 and weights in UV4 for the TJBake/Unit shader.</summary>
+        /// <summary>Builds a Mesh from file data. Bone indices ride in UV3, weights in UV4 and smoothed normals in UV5 for the TJBake/Unit shader.</summary>
         // Owners destroy these explicitly; the unload sweep on every state change must not free them first.
         private static void Own(List<UnityEngine.Object> owned, UnityEngine.Object o)
         {
@@ -236,11 +236,27 @@ namespace MemoriStudios.TJBake
             }
             if (d.Normals == null) mesh.RecalculateNormals();
             if (d.Tangents == null) mesh.RecalculateTangents();
+            if (d.Skinned) mesh.SetUVs(5, SmoothNormals(mesh.vertices, mesh.normals));
             var bounds = new Bounds();
             bounds.SetMinMax(d.BoundsMin, d.BoundsMax);
             mesh.bounds = bounds;
             mesh.UploadMeshData(true);
             return mesh;
+        }
+
+        // Each vertex's normal averaged with every other at the same spot, for TJBake/Unit's outline: a hard-edged mesh
+        // pushed out along its own normals would split apart at every edge.
+        private static Vector3[] SmoothNormals(Vector3[] vertices, Vector3[] normals)
+        {
+            var sums = new Dictionary<Vector3, Vector3>(vertices.Length);
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                sums.TryGetValue(vertices[i], out Vector3 sum);
+                sums[vertices[i]] = sum + normals[i];
+            }
+            var smooth = new Vector3[vertices.Length];
+            for (int i = 0; i < vertices.Length; i++) smooth[i] = sums[vertices[i]].normalized;
+            return smooth;
         }
 
         private static Vector3[] ToVector3(float3[] a) { var r = new Vector3[a.Length]; for (int i = 0; i < a.Length; i++) r[i] = a[i]; return r; }
