@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.2.11] - 2026-11-18
 
 - README: a Use it section on how a game adds the package.
 
