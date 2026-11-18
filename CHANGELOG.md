@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- README: a Use it section on how a game adds the package.
+
 ## [0.2.10] - 2026-11-17
 
 - A unit can hold 4 variants, up from 3: the bake takes up to three `ExtraVariants`, and `unit.json` up to four
