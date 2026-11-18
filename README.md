@@ -8,16 +8,25 @@ It was built for modding [Tabletop Tavern](https://store.steampowered.com/app/33
 game's units. Nothing in the package is specific to that game: any project can bake with it and play the result back
 on ordinary MeshRenderers or on an Entities Graphics batch.
 
+## Use it
+
+- `Window > TJBake`: the baker. It makes a bake profile from the selected prefab, then checks, bakes and previews it
+  into a folder of files. See Bake a character.
+- `TJBakeVisualLoader.Load(folder, owned)`: loads a baked folder into meshes, textures and materials that the caller
+  owns. Every count and offset is bounds-checked, and a damaged or hostile file is refused with one clear message.
+  `ReadManifest(folder, out error)` checks the manifest alone.
+- `TJBakePreviewPlayer`: plays a baked folder on MeshRenderers in edit mode or play mode. Call `LoadFolder(path)` and
+  `Play(slot)`; it ticks itself.
+- `TJBakePlayback`: the playback rules for a host of your own, such as an Entities Graphics batch. `Play` starts a slot
+  and `Step` advances it. The state's vectors are what the `TJBake/Unit` shader reads.
+- `TJBakeRagdoll.Record` (Editor): records a death clip. See Record a ragdoll death.
+
 ## What you get
 
-- **A baker window** (`Window > TJBake`) that turns a prefab and its clips into a folder of files.
 - **A file format** with no Unity serialization in it: a JSON manifest, a half-float matrix file, anchor matrices and
   meshes. Any language can read it. See [the format](Documentation~/format.md).
 - **A shader**, `TJBake/Unit`, built on URP Lit with forward, shadow, depth and depth-normal passes, so baked
   characters light, shadow and outline like any other mesh.
-- **A preview player**, `TJBakePreviewPlayer`, that plays a baked folder on MeshRenderers in edit mode or play mode.
-- **The loader** the game uses, `TJBakeVisualLoader`, with every count and offset bounds-checked. A damaged or hostile
-  file is refused with one clear message.
 
 ## Install
 
