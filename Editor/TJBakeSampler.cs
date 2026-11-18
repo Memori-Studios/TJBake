@@ -81,7 +81,7 @@ namespace MemoriStudios.TJBake.Editor
         public List<TJBakeSlotRequest> Slots = new();
         public List<TJBakeAnchorRequest> Anchors = new();
         public List<TJBakeAttachmentRequest> Attachments = new();
-        // Up to two more variants; they share the skeleton, clips and anchors of this one.
+        // Up to three more variants; they share the skeleton, clips and anchors of this one.
         public List<TJBakeVariantRequest> ExtraVariants = new();
         public TJBakeRequest Rider;
         // When set and it returns a name, the manifest names the texture asset instead of copying it out as a PNG.
@@ -420,7 +420,7 @@ namespace MemoriStudios.TJBake.Editor
             for (int i = 0; i < r.Slots.Count; i++) if (r.Slots[i].Clip == null) throw new Exception($"slot {i} ({r.Slots[i].Name}) has no clip");
             if (r.LodRoots.Count > 2) throw new Exception("at most 3 LODs");
             if (r.LodSwitch.Count != r.LodRoots.Count) throw new Exception($"lodSwitch needs {r.LodRoots.Count} entries for {r.LodRoots.Count + 1} LODs");
-            if (r.ExtraVariants.Count > 2) throw new Exception("at most 3 variants");
+            if (r.ExtraVariants.Count > 3) throw new Exception("at most 4 variants");
             if (r.ExtraVariants.Count > 0 && r.LodRoots.Count > 0) throw new Exception("LODs together with several variants are not supported yet");
 
             var skeleton = new Skeleton();

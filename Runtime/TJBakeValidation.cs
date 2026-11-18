@@ -52,7 +52,7 @@ namespace MemoriStudios.TJBake
                 if (s.count < 2) throw new GpuAnimFormatException($"slot {i} ({s.name}) has fewer than 2 frames");
             }
             if (json.materials == null || json.materials.Count == 0) throw new GpuAnimFormatException("materials is empty");
-            if (json.variants == null || json.variants.Count < 1 || json.variants.Count > 3) throw new GpuAnimFormatException("variants must hold 1 to 3 entries");
+            if (json.variants == null || json.variants.Count < 1 || json.variants.Count > 4) throw new GpuAnimFormatException("variants must hold 1 to 4 entries");
             int lodCount = json.variants[0].lods?.Count ?? 0;
             if (lodCount < 1 || lodCount > 3) throw new GpuAnimFormatException("each variant needs 1 to 3 LODs");
             if (rider && lodCount != 1) throw new GpuAnimFormatException("a rider has exactly one LOD");

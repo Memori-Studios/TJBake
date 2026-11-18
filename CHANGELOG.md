@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.10] - 2026-11-17
+
+- A unit can hold 4 variants, up from 3: the bake takes up to three `ExtraVariants`, and `unit.json` up to four
+  `variants`.
+
 ## [0.2.9] - 2026-11-10
 
 - `TJBake/Unit` can keep units readable against the ground, from four globals a host sets from its look. Unset they
