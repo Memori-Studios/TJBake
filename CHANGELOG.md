@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- `TJBake/Unit`'s outline rims a unit's silhouette only, never the gaps between its parts (armour plates, a limb over
+  the torso). The Outline pass is now tagged `UniversalForwardOnly`, so URP draws it right after the body, and it
+  skips every pixel that carries stencil bit 4. A material marks its body with that bit when `_UnitSilhouette` is 4;
+  a host sets it on the materials it turns the Outline pass on for. Enable or disable the pass by its new tag.
+
 ## [0.2.11] - 2026-11-18
 
 - README: a Use it section on how a game adds the package.

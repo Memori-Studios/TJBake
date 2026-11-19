@@ -56,6 +56,8 @@ Shader "TJBake/Unit"
         [HideInInspector] _UnitFlash("Hit flash", Float) = 0
         [HideInInspector] _UnitTint("Tint and its strength", Vector) = (0, 0, 0, 0)
         [HideInInspector] _UnitOutline("Outline colour and width", Vector) = (0, 0, 0, 0)
+        // 4 on a material whose Outline pass is on, so its body marks the stencil the outline steers round; 0 marks nothing.
+        [HideInInspector] _UnitSilhouette("Silhouette stencil bit", Float) = 0
     }
 
     SubShader
@@ -72,6 +74,7 @@ Shader "TJBake/Unit"
             ZWrite [_ZWrite]
             Cull [_Cull]
             AlphaToMask [_AlphaToMask]
+            Stencil { Ref 4 WriteMask [_UnitSilhouette] Comp Always Pass Replace }
 
             HLSLPROGRAM
             #pragma target 4.5
@@ -205,16 +208,19 @@ Shader "TJBake/Unit"
         }
 
         // An inverted hull: the back faces again, pushed out along smoothed normals and drawn flat in the outline colour,
-        // so a rim shows round the body. URP draws this tag in its opaque pass beside UniversalForward, so no renderer
-        // feature is needed. A unit whose outline width is 0 is collapsed before skinning and costs only the vertex call.
+        // so a rim shows round the body. URP draws this tag in its opaque pass right after an object's UniversalForward, so
+        // no renderer feature is needed. The stencil keeps it off every pixel an outlined body (one whose _UnitSilhouette
+        // is 4) already covers, so it rims the silhouette only, never a gap between the body's parts. A unit whose
+        // outline width is 0 is collapsed before skinning and costs only the vertex call.
         Pass
         {
             Name "Outline"
-            Tags { "LightMode" = "SRPDefaultUnlit" }
+            Tags { "LightMode" = "UniversalForwardOnly" }
 
             Cull Front
             ZWrite On
             ZTest LEqual
+            Stencil { Ref 4 ReadMask 4 Comp NotEqual }
 
             HLSLPROGRAM
             #pragma target 4.5
