@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## Unreleased
+
+## [0.2.12] - 2026-11-19
 
 - `TJBake/Unit`'s outline rims a unit's silhouette only, never the gaps between its parts (armour plates, a limb over
   the torso). The Outline pass is now tagged `UniversalForwardOnly`, so URP draws it right after the body; enable or
