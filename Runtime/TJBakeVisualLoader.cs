@@ -4,6 +4,7 @@ using System.IO;
 using MemoriStudios.TJBake.Format;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace MemoriStudios.TJBake
 {
@@ -93,6 +94,7 @@ namespace MemoriStudios.TJBake
             }
 
             visual.LodSwitch = json.lodSwitch.ToArray();
+            bool tangents = json.materials.Exists(m => !string.IsNullOrEmpty(m.normal));
             var meshes = new Dictionary<string, Mesh>();
             foreach (VariantJson v in json.variants)
             {
@@ -102,14 +104,14 @@ namespace MemoriStudios.TJBake
                     var lodData = new TJBakeLod();
                     foreach (MeshRefJson mr in lod.meshes)
                     {
-                        Mesh mesh = LoadMesh(folder, mr.file, boneCount, true, meshes, owned, out Bounds bounds);
+                        Mesh mesh = LoadMesh(folder, mr.file, boneCount, true, tangents, meshes, owned, out Bounds bounds);
                         lodData.Meshes.Add(new TJBakeMeshRef { Mesh = mesh, MaterialIndex = mr.material, Bounds = bounds });
                     }
                     variant.Lods.Add(lodData);
                 }
                 foreach (AttachmentJson a in v.attachments)
                 {
-                    Mesh mesh = LoadMesh(folder, a.file, boneCount, false, meshes, owned, out Bounds bounds);
+                    Mesh mesh = LoadMesh(folder, a.file, boneCount, false, tangents, meshes, owned, out Bounds bounds);
                     int mask = 0;
                     foreach (int l in a.lods) if (l >= 0 && l < 8) mask |= 1 << l;
                     variant.Attachments.Add(new TJBakeAttachment
@@ -208,12 +210,12 @@ namespace MemoriStudios.TJBake
             return mat;
         }
 
-        private static Mesh LoadMesh(string folder, string file, int boneCount, bool skinnedExpected, Dictionary<string, Mesh> cache, List<UnityEngine.Object> owned, out Bounds bounds)
+        private static Mesh LoadMesh(string folder, string file, int boneCount, bool skinnedExpected, bool tangents, Dictionary<string, Mesh> cache, List<UnityEngine.Object> owned, out Bounds bounds)
         {
             if (cache.TryGetValue(file, out Mesh cached)) { bounds = cached.bounds; return cached; }
             MeshBinData d = MeshBin.Read(ReadFile(folder, file, MaxMeshBytes), file, boneCount);
             if (d.Skinned != skinnedExpected) throw new GpuAnimFormatException($"{file} is {(d.Skinned ? "skinned" : "rigid")}, expected {(skinnedExpected ? "skinned" : "rigid")}");
-            Mesh mesh = ToMesh(d, file);
+            Mesh mesh = ToMesh(d, file, tangents);
             bounds = mesh.bounds;
             Own(owned, mesh);
             cache[file] = mesh;
@@ -228,28 +230,105 @@ namespace MemoriStudios.TJBake
             else UnityEngine.Object.DestroyImmediate(o);
         }
 
-        /// <summary>Builds a Mesh from file data. Bone indices ride in UV3, weights in UV4 and smoothed normals in UV5 for the TJBake/Unit shader.</summary>
         // Owners destroy these explicitly; the unload sweep on every state change must not free them first.
         private static void Own(List<UnityEngine.Object> owned, UnityEngine.Object o)
         {
             o.hideFlags |= HideFlags.DontUnloadUnusedAsset;
             owned.Add(o);
         }
+        #endregion
 
-        public static Mesh ToMesh(MeshBinData d, string name)
+        #region Packed meshes
+        // Half floats hold about three digits: past these sizes a unit's shape or a texel would visibly move.
+        private const float HalfPositionLimit = 32f, HalfUvLimit = 2f, HalfIndexLimit = 2048f;
+
+        /// <summary>Builds a Mesh from file data, packed small: half positions, UVs and bone indices; 8-bit normals, weights
+        /// and smoothed normals. Bone indices ride in UV3, weights in UV4 and smoothed normals in UV5 for the TJBake/Unit
+        /// shader. Tangents are kept only when <paramref name="tangents"/> asks for them, for a normal map.</summary>
+        public static Mesh ToMesh(MeshBinData d, string name, bool tangents)
         {
-            var mesh = new Mesh { name = name, indexFormat = d.Positions.Length > ushort.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16 };
-            mesh.SetVertices(ToVector3(d.Positions));
-            if (d.Normals != null) mesh.SetNormals(ToVector3(d.Normals));
-            if (d.Tangents != null) mesh.SetTangents(ToVector4(d.Tangents));
-            if (d.Uv0 != null) { var uv = new Vector2[d.Uv0.Length]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(d.Uv0[i].x, d.Uv0[i].y); mesh.SetUVs(0, uv); }
+            int count = d.Positions.Length;
+            float3[] normals = d.Normals;
+            float4[] tangentData = tangents ? d.Tangents : null;
+            if (normals == null || (tangents && tangentData == null)) Recalculate(d, tangents, ref normals, ref tangentData);
+
+            var mesh = new Mesh { name = name, indexFormat = count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16 };
+            var layout = new List<VertexAttributeDescriptor>
+            {
+                MaxAbs(d.Positions) <= HalfPositionLimit
+                    ? new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float16, 4)
+                    : new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+                new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4),
+            };
+            if (tangentData != null) layout.Add(new VertexAttributeDescriptor(VertexAttribute.Tangent, VertexAttributeFormat.SNorm8, 4));
+            if (d.Uv0 != null) layout.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord0, MaxAbs(d.Uv0) <= HalfUvLimit ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, 2));
             if (d.Skinned)
             {
-                var idx = new Vector4[d.BoneIndices.Length];
-                for (int i = 0; i < idx.Length; i++) idx[i] = new Vector4(d.BoneIndices[i].x, d.BoneIndices[i].y, d.BoneIndices[i].z, d.BoneIndices[i].w);
-                mesh.SetUVs(3, idx);
-                mesh.SetUVs(4, ToVector4(d.BoneWeights));
+                layout.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord3, MaxIndex(d.BoneIndices) < HalfIndexLimit ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, 4));
+                layout.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord4, VertexAttributeFormat.UNorm8, 4));
+                layout.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord5, VertexAttributeFormat.SNorm8, 4));
             }
+            mesh.SetVertexBufferParams(count, layout.ToArray());
+
+            var bytes = new byte[count * mesh.GetVertexBufferStride(0)];
+            Pack(bytes, mesh, VertexAttribute.Position, i => new float4(d.Positions[i], 1f));
+            Pack(bytes, mesh, VertexAttribute.Normal, i => new float4(normals[i], 0f));
+            Pack(bytes, mesh, VertexAttribute.Tangent, i => tangentData[i]);
+            Pack(bytes, mesh, VertexAttribute.TexCoord0, i => new float4(d.Uv0[i], 0f, 0f));
+            if (d.Skinned)
+            {
+                float3[] smooth = SmoothNormals(d.Positions, normals);
+                Pack(bytes, mesh, VertexAttribute.TexCoord3, i => d.BoneIndices[i]);
+                Pack(bytes, mesh, VertexAttribute.TexCoord4, i => WholeWeights(d.BoneWeights[i]));
+                Pack(bytes, mesh, VertexAttribute.TexCoord5, i => new float4(smooth[i], 0f));
+            }
+            mesh.SetVertexBufferData(bytes, 0, 0, bytes.Length);
+            SetSubmeshes(mesh, d);
+            var bounds = new Bounds();
+            bounds.SetMinMax(d.BoundsMin, d.BoundsMax);
+            mesh.bounds = bounds;
+            mesh.UploadMeshData(true);
+            return mesh;
+        }
+
+        // Normals and tangents the file leaves out, from the engine's own recalculation on a plain float copy.
+        private static void Recalculate(MeshBinData d, bool tangents, ref float3[] normals, ref float4[] tangentData)
+        {
+            var temp = new Mesh { indexFormat = IndexFormat.UInt32 };
+            var v3 = new Vector3[d.Positions.Length];
+            for (int i = 0; i < v3.Length; i++) v3[i] = d.Positions[i];
+            temp.SetVertices(v3);
+            if (normals != null)
+            {
+                for (int i = 0; i < v3.Length; i++) v3[i] = normals[i];
+                temp.SetNormals(v3);
+            }
+            if (d.Uv0 != null)
+            {
+                var uv = new Vector2[d.Uv0.Length];
+                for (int i = 0; i < uv.Length; i++) uv[i] = d.Uv0[i];
+                temp.SetUVs(0, uv);
+            }
+            SetSubmeshes(temp, d);
+            if (normals == null)
+            {
+                temp.RecalculateNormals();
+                Vector3[] n = temp.normals;
+                normals = new float3[n.Length];
+                for (int i = 0; i < n.Length; i++) normals[i] = n[i];
+            }
+            if (tangents && tangentData == null)
+            {
+                temp.RecalculateTangents();
+                Vector4[] t = temp.tangents;
+                tangentData = new float4[t.Length];
+                for (int i = 0; i < t.Length; i++) tangentData[i] = t[i];
+            }
+            DestroyNow(temp);
+        }
+
+        private static void SetSubmeshes(Mesh mesh, MeshBinData d)
+        {
             mesh.subMeshCount = d.Submeshes.Length;
             for (int s = 0; s < d.Submeshes.Length; s++)
             {
@@ -258,33 +337,68 @@ namespace MemoriStudios.TJBake
                 Array.Copy(d.Indices, start, sub, 0, count);
                 mesh.SetTriangles(sub, s, false);
             }
-            if (d.Normals == null) mesh.RecalculateNormals();
-            if (d.Tangents == null) mesh.RecalculateTangents();
-            if (d.Skinned) mesh.SetUVs(5, SmoothNormals(mesh.vertices, mesh.normals));
-            var bounds = new Bounds();
-            bounds.SetMinMax(d.BoundsMin, d.BoundsMax);
-            mesh.bounds = bounds;
-            mesh.UploadMeshData(true);
-            return mesh;
+        }
+
+        // Writes one attribute of every vertex in the format the layout gave it; an attribute the layout left out writes nothing.
+        private static void Pack(byte[] bytes, Mesh mesh, VertexAttribute attribute, Func<int, float4> value)
+        {
+            if (!mesh.HasVertexAttribute(attribute)) return;
+            int stride = mesh.GetVertexBufferStride(0), dim = mesh.GetVertexAttributeDimension(attribute), count = mesh.vertexCount;
+            VertexAttributeFormat format = mesh.GetVertexAttributeFormat(attribute);
+            for (int v = 0, at = mesh.GetVertexAttributeOffset(attribute); v < count; v++, at += stride)
+            {
+                float4 x = value(v);
+                for (int c = 0; c < dim; c++)
+                {
+                    switch (format)
+                    {
+                        case VertexAttributeFormat.Float32:
+                            int bits = math.asint(x[c]);
+                            for (int b = 0; b < 4; b++) bytes[at + c * 4 + b] = (byte)(bits >> (8 * b));
+                            break;
+                        case VertexAttributeFormat.Float16:
+                            uint half = math.f32tof16(x[c]);
+                            bytes[at + c * 2] = (byte)half;
+                            bytes[at + c * 2 + 1] = (byte)(half >> 8);
+                            break;
+                        case VertexAttributeFormat.SNorm8: bytes[at + c] = (byte)(sbyte)math.round(math.clamp(x[c], -1f, 1f) * 127f); break;
+                        case VertexAttributeFormat.UNorm8: bytes[at + c] = (byte)math.round(math.saturate(x[c]) * 255f); break;
+                        default: throw new NotSupportedException($"no packer for {format}");
+                    }
+                }
+            }
+        }
+
+        // Weights in whole 255ths that still add up to one, so 8-bit weights never pull a vertex toward the bone origin.
+        private static float4 WholeWeights(float4 w)
+        {
+            float sum = math.csum(w);
+            if (sum <= 0f) return float4.zero;
+            float4 q = math.round(w / sum * 255f);
+            int largest = 0;
+            for (int c = 1; c < 4; c++) if (w[c] > w[largest]) largest = c;
+            q[largest] += 255f - math.csum(q);
+            return q / 255f;
         }
 
         // Each vertex's normal averaged with every other at the same spot, for TJBake/Unit's outline: a hard-edged mesh
         // pushed out along its own normals would split apart at every edge.
-        private static Vector3[] SmoothNormals(Vector3[] vertices, Vector3[] normals)
+        private static float3[] SmoothNormals(float3[] vertices, float3[] normals)
         {
-            var sums = new Dictionary<Vector3, Vector3>(vertices.Length);
+            var sums = new Dictionary<float3, float3>(vertices.Length);
             for (int i = 0; i < vertices.Length; i++)
             {
-                sums.TryGetValue(vertices[i], out Vector3 sum);
+                sums.TryGetValue(vertices[i], out float3 sum);
                 sums[vertices[i]] = sum + normals[i];
             }
-            var smooth = new Vector3[vertices.Length];
-            for (int i = 0; i < vertices.Length; i++) smooth[i] = sums[vertices[i]].normalized;
+            var smooth = new float3[vertices.Length];
+            for (int i = 0; i < vertices.Length; i++) smooth[i] = math.normalizesafe(sums[vertices[i]]);
             return smooth;
         }
 
-        private static Vector3[] ToVector3(float3[] a) { var r = new Vector3[a.Length]; for (int i = 0; i < a.Length; i++) r[i] = a[i]; return r; }
-        private static Vector4[] ToVector4(float4[] a) { var r = new Vector4[a.Length]; for (int i = 0; i < a.Length; i++) r[i] = a[i]; return r; }
+        private static float MaxAbs(float3[] a) { float m = 0f; foreach (float3 x in a) m = math.max(m, math.cmax(math.abs(x))); return m; }
+        private static float MaxAbs(float2[] a) { float m = 0f; foreach (float2 x in a) m = math.max(m, math.cmax(math.abs(x))); return m; }
+        private static uint MaxIndex(uint4[] a) { uint m = 0; foreach (uint4 x in a) m = math.max(m, math.cmax(x)); return m; }
         #endregion
     }
 }

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Loaded meshes take about a third of the memory. The loader packs each vertex: half-float positions, UVs and bone
+  indices, 8-bit normals, smoothed normals and weights (rounded so they still add up to one). A mesh too large for
+  half floats (positions past 32 units, UVs past 2, bone indices from 2048) keeps 32-bit floats for that attribute.
+- Tangents load only for a visual whose materials have a normal map. `ToMesh` takes a `tangents` flag.
+
 ## [0.2.13] - 2026-11-20
 
 - Baked textures take a 64th of the memory a 4096 PNG did. The baker writes each as `mat_<n>_<role>.tex.bin`: at
