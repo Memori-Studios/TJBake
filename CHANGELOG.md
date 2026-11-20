@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.13] - 2026-11-20
+
 - Baked textures take a 64th of the memory a 4096 PNG did. The baker writes each as `mat_<n>_<role>.tex.bin`: at
   most 1024 on a side, sampled down from the source's mips, BC7 with every mip (`TJBakeTextureExport`). The loader
   uploads those as they are, and still reads PNG. Bake again to get them.
