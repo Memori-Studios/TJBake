@@ -238,7 +238,7 @@ namespace MemoriStudios.TJBake
             _skinned.Clear();
             _followers.Clear();
             DestroyFlatMaterials();
-            if (_content != null) DestroyOwned(_content.gameObject);
+            if (_content != null) TJBakeVisualLoader.DestroyNow(_content.gameObject);
             _content = null;
         }
 
@@ -246,21 +246,15 @@ namespace MemoriStudios.TJBake
         public void Clear()
         {
             ClearChildren();
-            foreach (Object o in _owned) if (o != null) DestroyOwned(o);
+            foreach (Object o in _owned) if (o != null) TJBakeVisualLoader.DestroyNow(o);
             _owned.Clear();
             _visual = null;
         }
 
         private void DestroyFlatMaterials()
         {
-            foreach (Material m in _flatMaterials) if (m != null) DestroyOwned(m);
+            foreach (Material m in _flatMaterials) if (m != null) TJBakeVisualLoader.DestroyNow(m);
             _flatMaterials.Clear();
-        }
-
-        private static void DestroyOwned(Object o)
-        {
-            if (Application.isPlaying) Destroy(o);
-            else DestroyImmediate(o);
         }
 
         private void OnDestroy() => Clear();

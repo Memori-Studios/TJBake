@@ -175,7 +175,7 @@ namespace MemoriStudios.TJBake
             string problem = !tex.LoadImage(bytes, true) ? $"{file} is not a PNG the engine can read"
                 : tex.width > 4096 || tex.height > 4096 ? $"{file} is larger than 4096 on a side" : null;
             if (problem == null) return tex;
-            TJBakeTextureLease.DestroyNow(tex);
+            DestroyNow(tex);
             throw new GpuAnimFormatException(problem);
         }
 
@@ -218,6 +218,14 @@ namespace MemoriStudios.TJBake
             Own(owned, mesh);
             cache[file] = mesh;
             return mesh;
+        }
+
+        /// <summary>Destroys an owned object now in edit mode, at the frame's end in Play.</summary>
+        internal static void DestroyNow(UnityEngine.Object o)
+        {
+            if (o == null) return;
+            if (Application.isPlaying) UnityEngine.Object.Destroy(o);
+            else UnityEngine.Object.DestroyImmediate(o);
         }
 
         /// <summary>Builds a Mesh from file data. Bone indices ride in UV3, weights in UV4 and smoothed normals in UV5 for the TJBake/Unit shader.</summary>

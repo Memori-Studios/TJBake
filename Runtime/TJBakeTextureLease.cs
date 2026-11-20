@@ -48,14 +48,7 @@ namespace MemoriStudios.TJBake
             _shared = null;
             if (shared == null || --shared.Users > 0) return;
             if (Loaded.TryGetValue(shared.Key, out Shared current) && current == shared) Loaded.Remove(shared.Key);
-            DestroyNow(shared.Texture);
-        }
-
-        internal static void DestroyNow(UnityEngine.Object o)
-        {
-            if (o == null) return;
-            if (Application.isPlaying) Destroy(o);
-            else DestroyImmediate(o);
+            TJBakeVisualLoader.DestroyNow(shared.Texture);
         }
     }
 }
