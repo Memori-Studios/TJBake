@@ -155,12 +155,28 @@ namespace MemoriStudios.TJBake
                 return hosted;
             }
             byte[] bytes = ReadFile(folder, file, MaxMeshBytes);
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, true, !srgb) { name = file };
-            if (!tex.LoadImage(bytes, true)) throw new GpuAnimFormatException($"{file} is not a PNG the engine can read");
-            if (tex.width > 4096 || tex.height > 4096) throw new GpuAnimFormatException($"{file} is larger than 4096 on a side");
-            Own(owned, tex);
+            Texture2D tex = TJBakeTextureLease.Take(bytes, srgb, () => DecodeTexture(file, bytes, srgb), owned);
             cache[file] = tex;
             return tex;
+        }
+
+        private static Texture2D DecodeTexture(string file, byte[] bytes, bool srgb)
+        {
+            if (file.EndsWith(TexBin.Extension, StringComparison.OrdinalIgnoreCase))
+            {
+                byte[] blocks = TexBin.Read(bytes, file, out int width, out int height, out int mipCount);
+                if (!SystemInfo.SupportsTextureFormat(TextureFormat.BC7)) throw new GpuAnimFormatException($"{file} is BC7, which this graphics device can't sample");
+                var compressed = new Texture2D(width, height, TextureFormat.BC7, mipCount, !srgb) { name = file };
+                compressed.LoadRawTextureData(blocks);
+                compressed.Apply(false, true);
+                return compressed;
+            }
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, true, !srgb) { name = file };
+            string problem = !tex.LoadImage(bytes, true) ? $"{file} is not a PNG the engine can read"
+                : tex.width > 4096 || tex.height > 4096 ? $"{file} is larger than 4096 on a side" : null;
+            if (problem == null) return tex;
+            TJBakeTextureLease.DestroyNow(tex);
+            throw new GpuAnimFormatException(problem);
         }
 
         private static Material MakeMaterial(string shaderName, MaterialJson m, Texture2D baseMap, Texture2D normalMap, Texture2D emissionMap, Texture2D boneTex, List<UnityEngine.Object> owned)

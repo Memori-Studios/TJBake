@@ -14,7 +14,7 @@ Mods/<ModName>/unit_visuals/<UnitName>/
   anchors.bin            anchor matrices per frame, required when any attachment exists
   body_<n>.mesh.bin      one per body mesh (per variant, per LOD, per material slot)
   attach_<n>.mesh.bin    one per attachment mesh
-  <texture>.png          every texture the materials name
+  <texture>.tex.bin      every texture the materials name, or <texture>.png
   icon.png               optional, the unit's card icon (512x768 RGBA)
   rider/                 optional, the same layout again with kind "rider"
 ```
@@ -153,9 +153,29 @@ Rules: an attachment mesh is never skinned; a body mesh always is. A submesh is 
 
 ## 6. Textures and icon
 
-PNG, 8-bit RGB or RGBA, power of two not required, at most 4096 on a side. Base colour is sRGB, normal maps are
-tangent-space OpenGL convention linear, emission is sRGB. `icon.png` is 512x768 RGBA, a 2:3 portrait; a host may use it as
-the character's card icon.
+A material's texture is a `*.tex.bin` (what the baker writes) or a PNG (what a hand-made folder may hold). The same
+file content in several folders loads once: every visual that names it shares one texture.
+
+```text
+offset  size  field
+0       4     magic "TJBT"
+4       4     u32 version = 1
+8       4     u32 width    (a multiple of 4, 4 to 4096)
+12      4     u32 height   (a multiple of 4, 4 to 4096)
+16      4     u32 mipCount (1 to the full chain)
+20      4     u32 format = 1 (BC7)
+24      8     reserved, zero
+32      ...   every mip, largest first: mip m is max(1, width >> m) by max(1, height >> m), in 4x4 blocks of 16 bytes,
+              ceil(w / 4) * ceil(h / 4) blocks, rows of blocks top to bottom as the GPU takes them
+```
+
+The runtime uploads the blocks as they are, not readable; the file size must equal 32 plus the blocks or the file is
+refused. The baker writes powers of two, at most 1024 on a side (a unit stands about 100 px tall at 1080p), sampled down from the
+source's mips, with the full mip chain.
+
+PNG: 8-bit RGB or RGBA, power of two not required, at most 4096 on a side, loaded uncompressed. Base colour is sRGB,
+normal maps are tangent-space OpenGL convention linear, emission is sRGB, in either kind of file. `icon.png` is 512x768
+RGBA, a 2:3 portrait; a host may use it as the character's card icon.
 
 ## 7. Validation and failure behaviour
 

@@ -731,14 +731,14 @@ namespace MemoriStudios.TJBake.Editor
             if (index.TryGetValue(material, out int i)) return i;
             i = json.materials.Count;
             index[material] = i;
-            string baseName = $"mat_{i}_base.png";
+            string baseName = TJBakeTextureExport.FileName(i, "base");
             Texture2D baseMap = FindBaseMap(material);
             // A custom graph with _Alpha ignores the base map's alpha, and the unit shader would multiply it in.
             bool dropBaseAlpha = material.HasProperty("_Alpha");
             string baseRef = baseMap != null && !dropBaseAlpha ? reference?.Invoke(baseMap) : null;
             if (baseRef != null) baseName = baseRef;
-            else if (baseMap == null) WriteSolidPng(Path.Combine(folder, baseName), material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white);
-            else ExportPng(baseMap, Path.Combine(folder, baseName), dropBaseAlpha);
+            else if (baseMap == null) TJBakeTextureExport.WriteSolid(Path.Combine(folder, baseName), material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white);
+            else TJBakeTextureExport.Write(baseMap, Path.Combine(folder, baseName), false, dropBaseAlpha);
             Color tint = material.HasProperty("_BaseColor") && baseMap != null ? material.GetColor("_BaseColor") : Color.white;
             // A custom graph keeps its opacity in _Alpha and its transparency in the shader's queue, not in Lit's _Surface.
             if (material.HasProperty("_Alpha")) tint.a *= material.GetFloat("_Alpha");
@@ -753,20 +753,20 @@ namespace MemoriStudios.TJBake.Editor
             if (normal != null && material.IsKeywordEnabled("_NORMALMAP"))
             {
                 entry.normal = reference?.Invoke(normal);
-                if (entry.normal == null) { entry.normal = $"mat_{i}_normal.png"; ExportPng(normal, Path.Combine(folder, entry.normal)); }
+                if (entry.normal == null) { entry.normal = TJBakeTextureExport.FileName(i, "normal"); TJBakeTextureExport.Write(normal, Path.Combine(folder, entry.normal), true); }
             }
             Texture2D emission = material.HasProperty("_EmissionMap") ? material.GetTexture("_EmissionMap") as Texture2D : null;
             if (emission != null && material.IsKeywordEnabled("_EMISSION"))
             {
                 entry.emission = reference?.Invoke(emission);
-                if (entry.emission == null) { entry.emission = $"mat_{i}_emission.png"; ExportPng(emission, Path.Combine(folder, entry.emission)); }
+                if (entry.emission == null) { entry.emission = TJBakeTextureExport.FileName(i, "emission"); TJBakeTextureExport.Write(emission, Path.Combine(folder, entry.emission), false); }
                 if (material.HasProperty("_EmissionColor")) { Color glow = material.GetColor("_EmissionColor"); entry.emissionColor = new[] { glow.r, glow.g, glow.b, glow.a }; }
             }
             else if (HasColor(material, "_Emission") && material.GetColor("_Emission").maxColorComponent > 0f)
             {
                 // A flat glow colour with no map: a white map lets the emission colour carry the whole glow.
-                entry.emission = $"mat_{i}_emission.png";
-                WriteSolidPng(Path.Combine(folder, entry.emission), Color.white);
+                entry.emission = TJBakeTextureExport.FileName(i, "emission");
+                TJBakeTextureExport.WriteSolid(Path.Combine(folder, entry.emission), Color.white);
                 Color glow = material.GetColor("_Emission");
                 entry.emissionColor = new[] { glow.r, glow.g, glow.b, 1f };
             }
@@ -792,40 +792,6 @@ namespace MemoriStudios.TJBake.Editor
                 if (material.GetTexture(name) is Texture2D t) return t;
             }
             return null;
-        }
-
-        private static void ExportPng(Texture2D texture, string path, bool dropAlpha = false)
-        {
-            string assetPath = AssetDatabase.GetAssetPath(texture);
-            if (!dropAlpha && !string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) { File.Copy(assetPath, path, true); return; }
-            var rt = RenderTexture.GetTemporary(texture.width, texture.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            Graphics.Blit(texture, rt);
-            RenderTexture previous = RenderTexture.active;
-            RenderTexture.active = rt;
-            var readable = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
-            readable.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
-            if (dropAlpha)
-            {
-                Color32[] pixels = readable.GetPixels32();
-                for (int p = 0; p < pixels.Length; p++) pixels[p].a = 255;
-                readable.SetPixels32(pixels);
-            }
-            readable.Apply();
-            RenderTexture.active = previous;
-            RenderTexture.ReleaseTemporary(rt);
-            File.WriteAllBytes(path, readable.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(readable);
-        }
-
-        private static void WriteSolidPng(string path, Color color)
-        {
-            var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            var px = new Color[16];
-            for (int i = 0; i < px.Length; i++) px[i] = color;
-            tex.SetPixels(px);
-            tex.Apply();
-            File.WriteAllBytes(path, tex.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(tex);
         }
         #endregion
 

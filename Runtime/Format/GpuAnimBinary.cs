@@ -122,6 +122,73 @@ namespace MemoriStudios.TJBake.Format
         private static float F(byte[] b, int o) => BitConverter.ToSingle(b, o);
     }
 
+    /// <summary>*.tex.bin: "TJBT", a BC7 texture with its mip chain, uploaded as the file holds it.</summary>
+    public static class TexBin
+    {
+        public const int HeaderSize = 32;
+        public const int MaxSize = 4096;
+        public const uint FormatBC7 = 1;
+        public const string Extension = ".tex.bin";
+        private const int BlockBytes = 16;
+        private static readonly byte[] Magic = { (byte)'T', (byte)'J', (byte)'B', (byte)'T' };
+
+        /// <summary>Returns every mip's blocks, largest first, ready for LoadRawTextureData.</summary>
+        public static byte[] Read(byte[] file, string name, out int width, out int height, out int mipCount)
+        {
+            if (file.Length < HeaderSize) throw new GpuAnimFormatException($"{name} is shorter than its header");
+            AnimBin.CheckMagic(file, Magic, name);
+            uint version = BitConverter.ToUInt32(file, 4);
+            if (version != 1) throw new GpuAnimFormatException($"{name} version {version} is not 1");
+            width = checked((int)BitConverter.ToUInt32(file, 8));
+            height = checked((int)BitConverter.ToUInt32(file, 12));
+            mipCount = checked((int)BitConverter.ToUInt32(file, 16));
+            uint format = BitConverter.ToUInt32(file, 20);
+            if (format != FormatBC7) throw new GpuAnimFormatException($"{name} format {format} is not {FormatBC7} (BC7)");
+            if (width < 4 || height < 4 || width > MaxSize || height > MaxSize || width % 4 != 0 || height % 4 != 0)
+                throw new GpuAnimFormatException($"{name} is {width}x{height}; each side must be a multiple of 4 from 4 to {MaxSize}");
+            if (mipCount < 1 || mipCount > FullMipCount(width, height)) throw new GpuAnimFormatException($"{name} mipCount {mipCount} is outside 1 to {FullMipCount(width, height)}");
+            long expected = HeaderSize + DataSize(width, height, mipCount);
+            if (file.Length != expected) throw new GpuAnimFormatException($"{name} is {file.Length} bytes, expected {expected}");
+            var data = new byte[file.Length - HeaderSize];
+            Buffer.BlockCopy(file, HeaderSize, data, 0, data.Length);
+            return data;
+        }
+
+        public static void Write(string path, int width, int height, int mipCount, byte[] blocks)
+        {
+            if (blocks.Length != DataSize(width, height, mipCount)) throw new ArgumentException($"{blocks.Length} bytes of blocks, a {width}x{height} BC7 texture with {mipCount} mips needs {DataSize(width, height, mipCount)}");
+            using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+            using var w = new BinaryWriter(fs);
+            w.Write(Magic);
+            w.Write(1u);
+            w.Write((uint)width);
+            w.Write((uint)height);
+            w.Write((uint)mipCount);
+            w.Write(FormatBC7);
+            w.Write(new byte[HeaderSize - 24]);
+            w.Write(blocks);
+        }
+
+        /// <summary>Bytes of block data for the mips: each mip is its size halved (at least 1) in 4x4 blocks of 16 bytes.</summary>
+        public static long DataSize(int width, int height, int mipCount)
+        {
+            long total = 0;
+            for (int m = 0; m < mipCount; m++)
+            {
+                int w = Math.Max(1, width >> m), h = Math.Max(1, height >> m);
+                total += (long)((w + 3) / 4) * ((h + 3) / 4) * BlockBytes;
+            }
+            return total;
+        }
+
+        public static int FullMipCount(int width, int height)
+        {
+            int count = 1;
+            for (int size = Math.Max(width, height); size > 1; size >>= 1) count++;
+            return count;
+        }
+    }
+
     /// <summary>A mesh as the file holds it. Bone data is present only on a skinned body mesh.</summary>
     public sealed class MeshBinData
     {

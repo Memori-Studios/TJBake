@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Baked textures take a 64th of the memory a 4096 PNG did. The baker writes each as `mat_<n>_<role>.tex.bin`: at
+  most 1024 on a side, sampled down from the source's mips, BC7 with every mip (`TJBakeTextureExport`). The loader
+  uploads those as they are, and still reads PNG. Bake again to get them.
+- Visuals share textures: a file whose content another loaded visual already holds loads once. A visual's owned list
+  holds a `TJBakeTextureLease` instead of the texture, and destroying the last lease destroys the texture, so owners
+  that destroy everything they own need no change.
+
 ## [0.2.12] - 2026-11-19
 
 - `TJBake/Unit`'s outline rims a unit's silhouette only, never the gaps between its parts (armour plates, a limb over
