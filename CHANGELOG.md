@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.14] - 2026-11-20
+
 - Loaded meshes take about a third of the memory. The loader packs each vertex: half-float positions, UVs and bone
   indices, 8-bit normals, smoothed normals and weights (rounded so they still add up to one). A mesh too large for
   half floats (positions past 32 units, UVs past 2, bone indices from 2048) keeps 32-bit floats for that attribute.
