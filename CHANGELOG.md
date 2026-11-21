@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.20] - 2026-11-21
+
 - `TJBakeFigure.LoadClip` picks the same clip in every checkout (Goblin Hunt GHBUG-281). From a file with several
   takes it returned whichever the asset database listed first, which differs between checkouts, so a jump file
   (`A_POLY_GBL_Jump_Idle_Neut.fbx`, a jump and its landing) baked the landing in one folder and the jump in another. It
