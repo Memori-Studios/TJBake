@@ -432,10 +432,10 @@ namespace MemoriStudios.TJBake.Editor
                     else
                     {
                         // Root motion is the host's job; a clip that travels must still animate in place.
-                        clip.SampleAnimation(r.Root, t);
+                        TJBakeClipSampling.Sample(clip, r.Root, t);
                         r.Root.transform.SetPositionAndRotation(rootPosition, rootRotation);
                     }
-                    foreach (GameObject lodRoot in r.LodRoots) clip.SampleAnimation(lodRoot, t);
+                    foreach (GameObject lodRoot in r.LodRoots) TJBakeClipSampling.Sample(clip, lodRoot, t);
                     for (int b = 0; b < boneCount; b++)
                     {
                         boneWorld[b] = scale * rootInv * skeleton.Bones[b].localToWorldMatrix;

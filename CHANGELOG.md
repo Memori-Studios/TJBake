@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Ragdoll falls move (Goblin Hunt GHBUG-279). A Generic clip, such as a fall `TJBakeFigure.RecordFalls` records,
+  sampled on a root whose Animator is Humanoid had its Transform curves ignored by `AnimationClip.SampleAnimation`, so
+  every frame of every fall held one still pose. `TJBakeClipSampling.Sample` plays those curves itself; the sampler
+  uses it for every slot that names no Animator state. A slot that holds an empty clip now bakes the rig as handed in
+  (its idle pose), not Unity's Humanoid default pose. A game's figures need a rebake to pick this up.
+
 ## [0.2.17] - 2026-11-21
 
 - `TJBakeRequest` and the request types it holds moved out of `TJBakeSampler.cs` into their own `TJBakeRequest.cs`;
