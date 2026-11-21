@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+- `TJBakeRequest` and the request types it holds moved out of `TJBakeSampler.cs` into their own `TJBakeRequest.cs`;
+  no change to how they are used. The 0.2.16 line below now gives the far mesh's real size.
+
 ## [0.2.16] - 2026-11-21
 
 - A bake can make its own LOD1 (Goblin Hunt GH-563): set `TJBakeRequest.AutoLodKeep` to the share of triangles to keep
   and `AutoLodSwitch` to the screen height below which it shows. `TJBakeAutoLod.Simplify` joins the corners that share a
   place, simplifies with Unity's Mesh LOD and keeps only the vertices left, so a flat-shaded figure lightens too
-  (GoblinWarrior: 8,228 vertices to 1,711 at a quarter). Every variant gets one, mesh for mesh with its LOD0.
+  (GoblinWarrior: 8,228 vertices to 2,995 at a quarter). Every variant gets one, mesh for mesh with its LOD0.
 
 ## [0.2.15] - 2026-11-21
 
