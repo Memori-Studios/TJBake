@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.17] - 2026-11-21
+
 - `TJBakeRequest` and the request types it holds moved out of `TJBakeSampler.cs` into their own `TJBakeRequest.cs`;
   no change to how they are used. The 0.2.16 line below now gives the far mesh's real size.
 
