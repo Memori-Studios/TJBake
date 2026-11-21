@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.19] - 2026-11-21
+
 - Old bakes can bake again by themselves (Goblin Hunt GHBUG-280). `TJBakeFigure.Write` adds `TJBakeFigure.FallsMark`
   (`", falls"`) to the baker name in unit.json, and `TJBakeFigure.HasStillFalls(manifestText)` is true for a figure
   baked without it, whose falls held one still pose before 0.2.18. A game's "bake what is missing" check calls it.
