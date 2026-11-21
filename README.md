@@ -55,6 +55,9 @@ https://github.com/Memori-Studios/TJBake.git
 Optional: add lower-detail prefabs that share the same bone names as LOD1 and LOD2, with a screen-height switch for
 each, and a rider profile for a mounted unit (the mount needs a `saddle` attachment).
 
+A bake from code can make its own LOD1 instead: `TJBakeRequest.AutoLodKeep` (the share of triangles to keep, such as
+0.25) and `AutoLodSwitch` (the screen height below which it shows). Each LOD0 mesh of each variant gets a lighter copy.
+
 ## Record a ragdoll death
 
 A death clip can be recorded instead of authored. `TJBakeRagdoll.Record` (Editor only) takes the rig as a torso with

@@ -78,6 +78,10 @@ namespace MemoriStudios.TJBake.Editor
         // Instances of lower-detail rigs sharing the skeleton by bone name, one per extra LOD.
         public List<GameObject> LodRoots = new();
         public List<float> LodSwitch = new();
+        // Above 0 and with no LodRoots: bakes a LOD1 of every variant's body meshes with about this share of their triangles,
+        // shown below AutoLodSwitch of the screen's height. Mesh for mesh, so a host can swap each mesh for its far one.
+        public float AutoLodKeep;
+        public float AutoLodSwitch = 0.1f;
         public List<TJBakeSlotRequest> Slots = new();
         public List<TJBakeAnchorRequest> Anchors = new();
         public List<TJBakeAttachmentRequest> Attachments = new();
@@ -422,6 +426,7 @@ namespace MemoriStudios.TJBake.Editor
             if (r.LodSwitch.Count != r.LodRoots.Count) throw new Exception($"lodSwitch needs {r.LodRoots.Count} entries for {r.LodRoots.Count + 1} LODs");
             if (r.ExtraVariants.Count > 3) throw new Exception("at most 4 variants");
             if (r.ExtraVariants.Count > 0 && r.LodRoots.Count > 0) throw new Exception("LODs together with several variants are not supported yet");
+            if (r.AutoLodKeep > 0f && (r.LodRoots.Count > 0 || r.IsRider)) throw new Exception("an automatic LOD1 needs no LOD prefabs and no rider");
 
             var skeleton = new Skeleton();
             bool noMesh = r.PlaceholderWhenNoMesh && r.Root.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length == 0;
@@ -468,6 +473,20 @@ namespace MemoriStudios.TJBake.Editor
                 if (part.Lod > 0 || part.Variant > 0) variantOffset[part.Variant] = math.max(variantOffset[part.Variant], RebindToLod0(part, skeleton));
             for (int v = 1; v < variantOffset.Length; v++)
                 report.AppendLine($"  variant {v}: bones sit up to {variantOffset[v]:F4} m from the first variant's (0 means the same proportions)");
+            int lodCount = r.LodRoots.Count + 1;
+            if (r.AutoLodKeep > 0f)
+            {
+                // After the rebind above, so each far mesh starts from its near mesh in the first rig's bind space.
+                int near = bodies.Count;
+                for (int b = 0; b < near; b++)
+                    bodies.Add(new BodyPart
+                    {
+                        Mesh = TJBakeAutoLod.Simplify(bodies[b].Mesh, r.AutoLodKeep), Material = bodies[b].Material, Lod = 1, Variant = bodies[b].Variant,
+                        BindPoses = bodies[b].BindPoses, BoneMap = bodies[b].BoneMap,
+                    });
+                lodCount = 2;
+                json.lodSwitch.Add(r.AutoLodSwitch);
+            }
 
             // Sample every frame: skinning matrices, anchor matrices, and posed vertices for the bounds.
             int boneCount = skeleton.Bones.Count;
@@ -531,7 +550,7 @@ namespace MemoriStudios.TJBake.Editor
             for (int v = 0; v < variantCount; v++)
             {
                 var vj = new VariantJson();
-                for (int l = 0; l <= r.LodRoots.Count; l++) vj.lods.Add(new LodJson());
+                for (int l = 0; l < lodCount; l++) vj.lods.Add(new LodJson());
                 variants.Add(vj);
             }
             for (int b = 0; b < bodies.Count; b++)
@@ -561,7 +580,7 @@ namespace MemoriStudios.TJBake.Editor
                 }
             }
             json.variants.AddRange(variants);
-            report.AppendLine($"{r.UnitName}{(r.IsRider ? " rider" : "")}: {boneCount} bones, {totalFrames} frames, {variantCount} variant(s), {bodies.Count} body meshes over {r.LodRoots.Count + 1} LOD(s), {props.Count} props, {json.materials.Count} materials, scale {r.RootScale}");
+            report.AppendLine($"{r.UnitName}{(r.IsRider ? " rider" : "")}: {boneCount} bones, {totalFrames} frames, {variantCount} variant(s), {bodies.Count} body meshes over {lodCount} LOD(s), {props.Count} props, {json.materials.Count} materials, scale {r.RootScale}");
             return json;
         }
 
