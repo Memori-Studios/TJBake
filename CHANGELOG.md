@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.16] - 2026-11-21
+
 - A bake can make its own LOD1 (Goblin Hunt GH-563): set `TJBakeRequest.AutoLodKeep` to the share of triangles to keep
   and `AutoLodSwitch` to the screen height below which it shows. `TJBakeAutoLod.Simplify` joins the corners that share a
   place, simplifies with Unity's Mesh LOD and keeps only the vertices left, so a flat-shaded figure lightens too
