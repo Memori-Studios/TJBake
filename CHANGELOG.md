@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.18] - 2026-11-21
+
 - Ragdoll falls move (Goblin Hunt GHBUG-279). A Generic clip, such as a fall `TJBakeFigure.RecordFalls` records,
   sampled on a root whose Animator is Humanoid had its Transform curves ignored by `AnimationClip.SampleAnimation`, so
   every frame of every fall held one still pose. `TJBakeClipSampling.Sample` plays those curves itself; the sampler
