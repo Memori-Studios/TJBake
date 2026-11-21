@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.15] - 2026-11-21
+
 - A game's figure baker shares its steps from the editor assembly instead of a copy of its own (Goblin Hunt GH-486):
   `TJBakeAtlas` tints an atlas through masks and swaps its colours, `TJBakeSkinning` skins rigid pieces and props onto
   their bones and folds a figure's meshes into one a material, and `TJBakeFigure` makes the flat material, poses Humanoid
