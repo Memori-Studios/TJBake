@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `TJBakeFigure.LoadClip` picks the same clip in every checkout (Goblin Hunt GHBUG-281). From a file with several
+  takes it returned whichever the asset database listed first, which differs between checkouts, so a jump file
+  (`A_POLY_GBL_Jump_Idle_Neut.fbx`, a jump and its landing) baked the landing in one folder and the jump in another. It
+  now returns the clip named like the file, or else the first clip by name. `TJBakeFigure.FallsMark` becomes
+  `", falls, named clips"`, so `HasStillFalls` asks every figure baked before this to bake once more.
+
 ## [0.2.19] - 2026-11-21
 
 - Old bakes can bake again by themselves (Goblin Hunt GHBUG-280). `TJBakeFigure.Write` adds `TJBakeFigure.FallsMark`

@@ -31,12 +31,22 @@ namespace MemoriStudios.TJBake.Editor
             return asset;
         }
 
-        /// <summary>The file's first clip, past Unity's preview clips.</summary>
+        /// <summary>
+        /// The file's clip named like the file, or else its first clip by name, past Unity's preview clips. A file can
+        /// hold several takes (a jump and its landing), and the asset database lists them in no fixed order.
+        /// </summary>
         public static AnimationClip LoadClip(string path)
         {
+            string fileName = Path.GetFileNameWithoutExtension(path);
+            AnimationClip first = null;
             foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
-                if (asset is AnimationClip clip && !clip.name.StartsWith("__preview__")) return clip;
-            throw new FileNotFoundException($"No clip in {path}.");
+            {
+                if (!(asset is AnimationClip clip) || clip.name.StartsWith("__preview__")) continue;
+                if (clip.name == fileName) return clip;
+                if (first == null || string.CompareOrdinal(clip.name, first.name) < 0) first = clip;
+            }
+            if (first == null) throw new FileNotFoundException($"No clip in {path}.");
+            return first;
         }
         #endregion
 
@@ -128,12 +138,13 @@ namespace MemoriStudios.TJBake.Editor
 
         #region Output
         /// <summary>
-        /// The mark <see cref="Write"/> adds to a bake's baker name: its falls move. A figure baked before tjbake 0.2.18
-        /// held one still pose in every fall and lacks it.
+        /// The mark <see cref="Write"/> adds to a bake's baker name: its falls move and <see cref="LoadClip"/> picked each
+        /// clip by name. A figure baked before tjbake 0.2.20 lacks it: before 0.2.18 every fall held one still pose, and
+        /// before 0.2.20 a file with several takes gave whichever loaded first.
         /// </summary>
-        public const string FallsMark = ", falls";
+        public const string FallsMark = ", falls, named clips";
 
-        /// <summary>Whether a figure's unit.json text comes from a bake whose falls held one still pose, so it should bake again.</summary>
+        /// <summary>Whether a figure's unit.json text comes from a bake older than <see cref="FallsMark"/>, so it should bake again.</summary>
         public static bool HasStillFalls(string manifestText) => !manifestText.Contains(FallsMark);
 
         /// <summary>
