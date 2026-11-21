@@ -127,9 +127,22 @@ namespace MemoriStudios.TJBake.Editor
         #endregion
 
         #region Output
-        /// <summary>Bakes the request into its output folder, emptied first, refreshes the asset database and returns the bake's report.</summary>
+        /// <summary>
+        /// The mark <see cref="Write"/> adds to a bake's baker name: its falls move. A figure baked before tjbake 0.2.18
+        /// held one still pose in every fall and lacks it.
+        /// </summary>
+        public const string FallsMark = ", falls";
+
+        /// <summary>Whether a figure's unit.json text comes from a bake whose falls held one still pose, so it should bake again.</summary>
+        public static bool HasStillFalls(string manifestText) => !manifestText.Contains(FallsMark);
+
+        /// <summary>
+        /// Bakes the request into its output folder, emptied first, refreshes the asset database and returns the bake's
+        /// report. The baker name gains <see cref="FallsMark"/>.
+        /// </summary>
         public static string Write(TJBakeRequest request)
         {
+            if (!request.BakerName.Contains(FallsMark)) request.BakerName += FallsMark;
             if (Directory.Exists(request.OutputFolder)) Directory.Delete(request.OutputFolder, true);
             var report = new StringBuilder();
             TJBakeSampler.Bake(request, report);
