@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.21] - 2026-11-23
+
 - An automatic LOD2 (Goblin Hunt GH-680). `TJBakeRequest.AutoLod2Vertices` above 0, with an automatic LOD1, bakes
   each variant's body meshes again with at most about that many vertices among them (`TJBakeAutoLod.SimplifyTo`),
   shown below `AutoLod2Switch`. Bones `AutoLod2Folds` names skin with their nearest kept parent and each vertex keeps
