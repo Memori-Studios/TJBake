@@ -76,6 +76,12 @@ namespace MemoriStudios.TJBake.Editor
         // shown below AutoLodSwitch of the screen's height. Mesh for mesh, so a host can swap each mesh for its far one.
         public float AutoLodKeep;
         public float AutoLodSwitch = 0.1f;
+        // Above 0 with an automatic LOD1: also bakes an automatic LOD2 of each variant's body meshes with at most about this
+        // many vertices among them, shown below AutoLod2Switch of the screen's height. Its bones that AutoLod2Folds names
+        // skin with their nearest kept parent, and each vertex keeps its two strongest bones, so it skins with fewer reads.
+        public int AutoLod2Vertices;
+        public float AutoLod2Switch = 0.03f;
+        public Func<string, bool> AutoLod2Folds;
         public List<TJBakeSlotRequest> Slots = new();
         public List<TJBakeAnchorRequest> Anchors = new();
         public List<TJBakeAttachmentRequest> Attachments = new();

@@ -11,7 +11,7 @@ using UnityEngine;
 namespace MemoriStudios.TJBake.Editor
 {
     /// <summary>Samples a rig's clips into the TJBake file format: bone matrices per frame, anchor matrices, meshes, textures and the manifest.</summary>
-    public static class TJBakeSampler
+    public static partial class TJBakeSampler
     {
         #region Entry
         public static UnitJson Bake(TJBakeRequest r, StringBuilder report)
@@ -74,6 +74,8 @@ namespace MemoriStudios.TJBake.Editor
             }
 
             public bool TryByName(string name, out int index) => _byName.TryGetValue(name, out index);
+
+            public bool TryByTransform(Transform bone, out int index) => _byTransform.TryGetValue(bone, out index);
         }
 
         private sealed class BodyPart
@@ -340,6 +342,7 @@ namespace MemoriStudios.TJBake.Editor
             if (r.ExtraVariants.Count > 3) throw new Exception("at most 4 variants");
             if (r.ExtraVariants.Count > 0 && r.LodRoots.Count > 0) throw new Exception("LODs together with several variants are not supported yet");
             if (r.AutoLodKeep > 0f && (r.LodRoots.Count > 0 || r.IsRider)) throw new Exception("an automatic LOD1 needs no LOD prefabs and no rider");
+            if (r.AutoLod2Vertices > 0 && (r.AutoLodKeep <= 0f || r.AutoLod2Switch >= r.AutoLodSwitch)) throw new Exception("an automatic LOD2 needs an automatic LOD1 and a lower switch height");
 
             var skeleton = new Skeleton();
             bool noMesh = r.PlaceholderWhenNoMesh && r.Root.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length == 0;
@@ -386,20 +389,7 @@ namespace MemoriStudios.TJBake.Editor
                 if (part.Lod > 0 || part.Variant > 0) variantOffset[part.Variant] = math.max(variantOffset[part.Variant], RebindToLod0(part, skeleton));
             for (int v = 1; v < variantOffset.Length; v++)
                 report.AppendLine($"  variant {v}: bones sit up to {variantOffset[v]:F4} m from the first variant's (0 means the same proportions)");
-            int lodCount = r.LodRoots.Count + 1;
-            if (r.AutoLodKeep > 0f)
-            {
-                // After the rebind above, so each far mesh starts from its near mesh in the first rig's bind space.
-                int near = bodies.Count;
-                for (int b = 0; b < near; b++)
-                    bodies.Add(new BodyPart
-                    {
-                        Mesh = TJBakeAutoLod.Simplify(bodies[b].Mesh, r.AutoLodKeep), Material = bodies[b].Material, Lod = 1, Variant = bodies[b].Variant,
-                        BindPoses = bodies[b].BindPoses, BoneMap = bodies[b].BoneMap,
-                    });
-                lodCount = 2;
-                json.lodSwitch.Add(r.AutoLodSwitch);
-            }
+            int lodCount = r.AutoLodKeep > 0f ? AddAutoLods(r, skeleton, bodies, json) : r.LodRoots.Count + 1;
 
             // Sample every frame: skinning matrices, anchor matrices, and posed vertices for the bounds.
             int boneCount = skeleton.Bones.Count;

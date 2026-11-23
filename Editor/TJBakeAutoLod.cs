@@ -14,12 +14,17 @@ namespace MemoriStudios.TJBake.Editor
     /// </summary>
     public static class TJBakeAutoLod
     {
+        // The least a corner's normal may agree with its face, as a cosine, before the corner takes the face's normal.
+        private const float MinFacing = 0.5f;
+
         /// <summary>
         /// The mesh with about <paramref name="keep"/> of its triangles (0 to 1). Corners that share a place are joined first,
         /// so a mesh split at every hard edge and atlas patch simplifies as one surface. Each new triangle then takes its
         /// colour from the source triangle beside it that lies nearest and faces most alike: one UV for its three corners,
         /// as a low-poly atlas paints a face one patch. Each corner takes the source vertex at its place whose normal is
-        /// closest to that triangle's, so hard and soft edges stay as they were.
+        /// closest to the new triangle's face, so hard and soft edges stay as they were. Where none comes within 60 degrees
+        /// of it, the corner takes the face's own normal: a normal turned from the camera on a face toward it lights the
+        /// look's distance rim on the far crowd as bright flecks.
         /// </summary>
         public static MeshBinData Simplify(MeshBinData source, float keep)
         {
@@ -42,33 +47,109 @@ namespace MemoriStudios.TJBake.Editor
                 (trianglesAt[p] ??= new List<int>()).Add(i / 3 * 3);
             }
 
-            var made = new Dictionary<(int, float2), int>();
-            var picked = new List<(int vertex, float2 uv)>();
+            var made = new Dictionary<(int, float2, float3), int>();
+            var picked = new List<(int vertex, float2 uv, float3 normal)>();
             var result = new int[simple.Length];
             for (int t = 0; t < simple.Length; t += 3)
             {
                 int source3 = Nearest(source, joined, trianglesAt, simple, t);
                 float2 uv = float2.zero;
-                float3 normal = float3.zero;
+                if (source.Uv0 != null)
+                    for (int k = 0; k < 3; k++) uv += source.Uv0[source.Indices[source3 + k]] / 3f;
+                float3 face = math.normalizesafe(math.cross(joined[simple[t + 1]] - joined[simple[t]], joined[simple[t + 2]] - joined[simple[t]]));
                 for (int k = 0; k < 3; k++)
                 {
-                    int v = source.Indices[source3 + k];
-                    if (source.Uv0 != null) uv += source.Uv0[v] / 3f;
-                    if (source.Normals != null) normal += source.Normals[v];
-                }
-                for (int k = 0; k < 3; k++)
-                {
-                    int v = Facing(source, verticesAt[simple[t + k]], normal);
-                    if (!made.TryGetValue((v, uv), out int to))
+                    int v = Facing(source, verticesAt[simple[t + k]], face);
+                    float3 normal = source.Normals == null ? float3.zero : math.dot(source.Normals[v], face) >= MinFacing ? source.Normals[v] : face;
+                    if (!made.TryGetValue((v, uv, normal), out int to))
                     {
                         to = picked.Count;
-                        made[(v, uv)] = to;
-                        picked.Add((v, uv));
+                        made[(v, uv, normal)] = to;
+                        picked.Add((v, uv, normal));
                     }
                     result[t + k] = to;
                 }
             }
             return Pick(source, picked, result);
+        }
+
+        /// <summary>
+        /// Lighter copies of one look's meshes with at most about <paramref name="maxVertices"/> among them: each starts at
+        /// <paramref name="keep"/> of its triangles, then the one with the most vertices halves its share again until they
+        /// fit or none gets lighter.
+        /// </summary>
+        public static MeshBinData[] SimplifyTo(IReadOnlyList<MeshBinData> sources, float keep, int maxVertices)
+        {
+            var made = new MeshBinData[sources.Count];
+            var keeps = new float[sources.Count];
+            var spent = new bool[sources.Count];
+            int total = 0;
+            for (int i = 0; i < made.Length; i++)
+            {
+                keeps[i] = keep;
+                made[i] = Simplify(sources[i], keep);
+                total += made[i].Positions.Length;
+            }
+            while (total > maxVertices)
+            {
+                int most = -1;
+                for (int i = 0; i < made.Length; i++)
+                    if (!spent[i] && (most < 0 || made[i].Positions.Length > made[most].Positions.Length)) most = i;
+                if (most < 0) break;
+                keeps[most] *= 0.5f;
+                MeshBinData lighter = Simplify(sources[most], keeps[most]);
+                if (lighter.Indices.Length >= made[most].Indices.Length)
+                {
+                    spent[most] = true;
+                    continue;
+                }
+                total += lighter.Positions.Length - made[most].Positions.Length;
+                made[most] = lighter;
+            }
+            return made;
+        }
+
+        /// <summary>
+        /// Moves each vertex's weights onto the bones <paramref name="into"/> maps them to, joins weights that land on one
+        /// bone and keeps the two strongest, so a far mesh skins with fewer bone reads.
+        /// </summary>
+        public static void Fold(MeshBinData mesh, int[] into)
+        {
+            if (mesh.BoneIndices == null) return;
+            for (int v = 0; v < mesh.BoneIndices.Length; v++)
+            {
+                uint4 idx = mesh.BoneIndices[v];
+                float4 w = mesh.BoneWeights[v];
+                uint b0 = (uint)into[(int)idx.x], b1 = 0;
+                float w0 = 0f, w1 = 0f;
+                for (int k = 0; k < 4; k++)
+                {
+                    if (w[k] <= 0f) continue;
+                    uint bone = (uint)into[(int)idx[k]];
+                    // The joined weight of this bone across all four slots, counted once at its first slot.
+                    bool seen = false;
+                    float sum = 0f;
+                    for (int j = 0; j < 4; j++)
+                    {
+                        if (w[j] <= 0f || (uint)into[(int)idx[j]] != bone) continue;
+                        if (j < k) seen = true;
+                        sum += w[j];
+                    }
+                    if (seen) continue;
+                    if (sum > w0)
+                    {
+                        b1 = b0; w1 = w0;
+                        b0 = bone; w0 = sum;
+                    }
+                    else if (sum > w1)
+                    {
+                        b1 = bone; w1 = sum;
+                    }
+                }
+                float total = w0 + w1;
+                mesh.BoneIndices[v] = new uint4(b0, b1, 0, 0);
+                mesh.BoneWeights[v] = total > 0f ? new float4(w0 / total, w1 / total, 0f, 0f) : new float4(1f, 0f, 0f, 0f);
+            }
         }
 
         // Each vertex's place: vertices at the same position share one, numbered in order of first use.
@@ -161,7 +242,7 @@ namespace MemoriStudios.TJBake.Editor
             return best;
         }
 
-        private static MeshBinData Pick(MeshBinData source, List<(int vertex, float2 uv)> picked, int[] indices)
+        private static MeshBinData Pick(MeshBinData source, List<(int vertex, float2 uv, float3 normal)> picked, int[] indices)
         {
             int n = picked.Count;
             var mesh = new MeshBinData
@@ -178,7 +259,7 @@ namespace MemoriStudios.TJBake.Editor
             {
                 int v = picked[i].vertex;
                 mesh.Positions[i] = source.Positions[v];
-                if (mesh.Normals != null) mesh.Normals[i] = source.Normals[v];
+                if (mesh.Normals != null) mesh.Normals[i] = picked[i].normal;
                 if (mesh.Tangents != null) mesh.Tangents[i] = source.Tangents[v];
                 if (mesh.Uv0 != null) mesh.Uv0[i] = picked[i].uv;
                 if (mesh.BoneIndices != null) mesh.BoneIndices[i] = source.BoneIndices[v];

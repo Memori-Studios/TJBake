@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- An automatic LOD2 (Goblin Hunt GH-680). `TJBakeRequest.AutoLod2Vertices` above 0, with an automatic LOD1, bakes
+  each variant's body meshes again with at most about that many vertices among them (`TJBakeAutoLod.SimplifyTo`),
+  shown below `AutoLod2Switch`. Bones `AutoLod2Folds` names skin with their nearest kept parent and each vertex keeps
+  its two strongest bones (`TJBakeAutoLod.Fold`), so it skins with half the bone reads. `TJBakeFigure.FoldsFar` names
+  a Synty rig's fingers, thumbs, toes, face bones and middle spine bone.
+- `TJBakeAutoLod.Simplify` picks each corner's normal by the new triangle's own face, and takes the face's normal where
+  no source normal comes within 60 degrees of it. A normal turned from the camera lit a host's distance rim as bright
+  flecks on a far crowd. Figures need a rebake to pick this up.
+
 ## [0.2.20] - 2026-11-21
 
 - `TJBakeFigure.LoadClip` picks the same clip in every checkout (Goblin Hunt GHBUG-281). From a file with several

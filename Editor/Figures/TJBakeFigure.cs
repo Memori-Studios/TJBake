@@ -136,6 +136,16 @@ namespace MemoriStudios.TJBake.Editor
         }
         #endregion
 
+        #region Far LOD
+        /// <summary>
+        /// The bones a Synty rig's farthest LOD folds into their parents, for <see cref="TJBakeRequest.AutoLod2Folds"/>:
+        /// fingers, thumbs, toes, the face's eye, brow, jaw and ear bones, and the middle of a humanoid's three spine bones.
+        /// </summary>
+        public static bool FoldsFar(string bone) =>
+            bone.Contains("Finger") || bone.StartsWith("Thumb") || bone.StartsWith("Toes") || bone.StartsWith("Eye") ||
+            bone.StartsWith("Jaw") || bone.StartsWith("Ear") || bone == "Spine_02";
+        #endregion
+
         #region Output
         /// <summary>
         /// The mark <see cref="Write"/> adds to a bake's baker name: its falls move and <see cref="LoadClip"/> picked each
