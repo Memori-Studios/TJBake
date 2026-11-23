@@ -57,6 +57,9 @@ each, and a rider profile for a mounted unit (the mount needs a `saddle` attachm
 
 A bake from code can make its own LOD1 instead: `TJBakeRequest.AutoLodKeep` (the share of triangles to keep, such as
 0.25) and `AutoLodSwitch` (the screen height below which it shows). Each LOD0 mesh of each variant gets a lighter copy.
+It can add a LOD2 as well: `AutoLod2Vertices` (about how many vertices each variant's LOD2 meshes have in all) and
+`AutoLod2Switch` (its screen height). `AutoLod2Folds` names bones whose weights move to their nearest kept parent, such
+as `TJBakeFigure.FoldsFar` for a Synty rig, and each LOD2 vertex keeps its two strongest bones.
 
 ## Record a ragdoll death
 
